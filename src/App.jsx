@@ -217,7 +217,7 @@ function App() {
                         <td className="py-3 text-white">{lote.lote}</td>
                         <td className="py-3 text-white">{lote.raca}</td>
                         <td className="py-3 text-white">{lote.quantidade}</td>
-                        <td className="py-3 text-white">{new Date(lote.data).toLocaleDateString('pt-BR')}</td>
+                        <td className="py-3 text-white">{lote.data && !isNaN(new Date(lote.data)) ? new Date(lote.data).toLocaleDateString('pt-BR') : lote.data || 'Sem data'}</td>
                         <td className="py-3 text-white">{lote.alojamento}</td>
                         <td className="py-3">
                           <div className="flex gap-2">
