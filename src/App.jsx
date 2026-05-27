@@ -9,6 +9,7 @@ function App() {
   const [showModal, setShowModal] = useState(false)
   const [modalType, setModalType] = useState('')
   const [editingItem, setEditingItem] = useState(null)
+  const [formData, setFormData] = useState({})
 
   // Load data from localStorage
   useEffect(() => {
@@ -33,45 +34,22 @@ function App() {
     localStorage.setItem('avesgest_financeiro', JSON.stringify(financeiro))
   }, [financeiro])
 
-  // Add/Edit functions
-  const handleAddLote = (data) => {
-    if (editingItem) {
-      setLotes(lotes.map(l => l.id === editingItem.id ? {...data, id: editingItem.id} : l))
-    } else {
-      setLotes([...lotes, {...data, id: Date.now()}])
-    }
-    closeModal()
-  }
-
-  const handleAddProducao = (data) => {
-    if (editingItem) {
-      setProducao(producao.map(p => p.id === editingItem.id ? {...data, id: editingItem.id} : p))
-    } else {
-      setProducao([...producao, {...data, id: Date.now()}])
-    }
-    closeModal()
-  }
-
-  const handleAddFinanceiro = (data) => {
-    if (editingItem) {
-      setFinanceiro(financeiro.map(f => f.id === editingItem.id ? {...data, id: editingItem.id} : f))
-    } else {
-      setFinanceiro([...financeiro, {...data, id: Date.now()}])
-    }
-    closeModal()
-  }
-
-  const handleDelete = (id, type) => {
-    if (window.confirm('Deseja realmente excluir?')) {
-      if (type === 'lote') setLotes(lotes.filter(l => l.id !== id))
-      if (type === 'producao') setProducao(producao.filter(p => p.id !== id))
-      if (type === 'financeiro') setFinanceiro(financeiro.filter(f => f.id !== id))
-    }
-  }
-
+  // Open modal functions
   const openModal = (type, item = null) => {
     setModalType(type)
     setEditingItem(item)
+    if (item) {
+      setFormData(item)
+    } else {
+      // Reset form with defaults
+      if (type === 'lote') {
+        setFormData({ lote: '', raca: '', quantidade: '', data: '', alojamento: '' })
+      } else if (type === 'producao') {
+        setFormData({ data: '', lote: '', ovos: '', trincados: '' })
+      } else if (type === 'financeiro') {
+        setFormData({ data: '', descricao: '', tipo: 'receita', valor: '' })
+      }
+    }
     setShowModal(true)
   }
 
@@ -79,378 +57,522 @@ function App() {
     setShowModal(false)
     setModalType('')
     setEditingItem(null)
+    setFormData({})
   }
 
-  // Calculate statistics
-  const totalAves = lotes.reduce((sum, l) => sum + (parseInt(l.quantidade) || 0), 0)
-  const producaoHoje = producao.filter(p => p.data === new Date().toISOString().split('T')[0])
-    .reduce((sum, p) => sum + (parseInt(p.ovos) || 0), 0)
-  const receitasMes = financeiro.filter(f => f.tipo === 'receita' && f.data?.startsWith(new Date().toISOString().slice(0,7)))
-    .reduce((sum, f) => sum + (parseFloat(f.valor) || 0), 0)
-  const despesasMes = financeiro.filter(f => f.tipo === 'despesa' && f.data?.startsWith(new Date().toISOString().slice(0,7)))
-    .reduce((sum, f) => sum + (parseFloat(f.valor) || 0), 0)
+  // Add/Edit functions
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    
+    if (modalType === 'lote') {
+      if (editingItem) {
+        setLotes(lotes.map(l => l.id === editingItem.id ? {...formData, id: editingItem.id} : l))
+      } else {
+        setLotes([...lotes, {...formData, id: Date.now()}])
+      }
+    } else if (modalType === 'producao') {
+      if (editingItem) {
+        setProducao(producao.map(p => p.id === editingItem.id ? {...formData, id: editingItem.id} : p))
+      } else {
+        setProducao([...producao, {...formData, id: Date.now()}])
+      }
+    } else if (modalType === 'financeiro') {
+      if (editingItem) {
+        setFinanceiro(financeiro.map(f => f.id === editingItem.id ? {...formData, id: editingItem.id} : f))
+      } else {
+        setFinanceiro([...financeiro, {...formData, id: Date.now()}])
+      }
+    }
+    
+    closeModal()
+  }
 
-  return (
-    <div className="min-h-screen bg-slate-900 text-slate-100">
-      {/* Sidebar */}
-      <div className="fixed left-0 top-0 h-full w-64 bg-slate-800 border-r border-slate-700 p-4">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-amber-400 flex items-center gap-2">
-            <span className="text-3xl">🐥</span> AvesGest
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">Gestão de Aves Poedeiras</p>
-        </div>
-        
-        <nav className="space-y-2">
-          <NavItem icon={<Home size={20}/>} label="Dashboard" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
-          <NavItem icon={<Users size={20}/>} label="Lotes" active={currentView === 'lotes'} onClick={() => setCurrentView('lotes')} />
-          <NavItem icon={<Egg size={20}/>} label="Produção" active={currentView === 'producao'} onClick={() => setCurrentView('producao')} />
-          <NavItem icon={<DollarSign size={20}/>} label="Financeiro" active={currentView === 'financeiro'} onClick={() => setCurrentView('financeiro')} />
-        </nav>
-      </div>
+  // Delete function
+  const handleDelete = (id, type) => {
+    if (!window.confirm('Tem certeza que deseja excluir?')) return
+    
+    if (type === 'lote') {
+      setLotes(lotes.filter(l => l.id !== id))
+    } else if (type === 'producao') {
+      setProducao(producao.filter(p => p.id !== id))
+    } else if (type === 'financeiro') {
+      setFinanceiro(financeiro.filter(f => f.id !== id))
+    }
+  }
 
-      {/* Main Content */}
-      <div className="ml-64 p-8">
-        {currentView === 'dashboard' && (
-          <Dashboard totalAves={totalAves} producaoHoje={producaoHoje} receitasMes={receitasMes} despesasMes={despesasMes} />
-        )}
-        {currentView === 'lotes' && (
-          <LotesView lotes={lotes} onAdd={() => openModal('lote')} onEdit={(item) => openModal('lote', item)} onDelete={(id) => handleDelete(id, 'lote')} />
-        )}
-        {currentView === 'producao' && (
-          <ProducaoView producao={producao} lotes={lotes} onAdd={() => openModal('producao')} onEdit={(item) => openModal('producao', item)} onDelete={(id) => handleDelete(id, 'producao')} />
-        )}
-        {currentView === 'financeiro' && (
-          <FinanceiroView financeiro={financeiro} onAdd={() => openModal('financeiro')} onEdit={(item) => openModal('financeiro', item)} onDelete={(id) => handleDelete(id, 'financeiro')} />
-        )}
-      </div>
+  // Calculate stats
+  const totalAves = lotes.reduce((sum, lote) => sum + parseInt(lote.quantidade || 0), 0)
+  const producaoHoje = producao
+    .filter(p => p.data === new Date().toISOString().split('T')[0])
+    .reduce((sum, p) => sum + parseInt(p.ovos || 0), 0)
+  
+  const receitasMes = financeiro
+    .filter(f => f.tipo === 'receita' && new Date(f.data).getMonth() === new Date().getMonth())
+    .reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
+  
+  const despesasMes = financeiro
+    .filter(f => f.tipo === 'despesa' && new Date(f.data).getMonth() === new Date().getMonth())
+    .reduce((sum, f) => sum + parseFloat(f.valor || 0), 0)
+  
+  const saldoMes = receitasMes - despesasMes
 
-      {/* Modal */}
-      {showModal && (
-        <Modal onClose={closeModal}>
-          {modalType === 'lote' && <LoteForm onSubmit={handleAddLote} initialData={editingItem} onCancel={closeModal} />}
-          {modalType === 'producao' && <ProducaoForm onSubmit={handleAddProducao} initialData={editingItem} lotes={lotes} onCancel={closeModal} />}
-          {modalType === 'financeiro' && <FinanceiroForm onSubmit={handleAddFinanceiro} initialData={editingItem} onCancel={closeModal} />}
-        </Modal>
-      )}
-    </div>
-  )
-}
-
-// Components
-function NavItem({ icon, label, active, onClick }) {
-  return (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-      active ? 'bg-amber-500 text-white' : 'text-slate-300 hover:bg-slate-700'
-    }`}>
-      {icon}
-      <span className="font-medium">{label}</span>
+  // Components
+  const NavButton = ({ icon: Icon, label, view }) => (
+    <button
+      onClick={() => setCurrentView(view)}
+      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+        currentView === view
+          ? 'bg-amber-500 text-white'
+          : 'bg-slate-700 hover:bg-slate-600 text-white'
+      }`}
+    >
+      <Icon size={20} />
+      {label}
     </button>
   )
-}
 
-function Dashboard({ totalAves, producaoHoje, receitasMes, despesasMes }) {
-  const saldoMes = receitasMes - despesasMes
-  return (
-    <div>
-      <h2 className="text-3xl font-bold mb-6">Dashboard</h2>
-      <div className="grid grid-cols-4 gap-6">
-        <StatCard icon={<Users size={32}/>} label="Total de Aves" value={totalAves} color="blue" />
-        <StatCard icon={<Egg size={32}/>} label="Produção Hoje" value={producaoHoje} color="amber" />
-        <StatCard icon={<TrendingUp size={32}/>} label="Receitas (Mês)" value={`R$ ${receitasMes.toFixed(2)}`} color="green" />
-        <StatCard icon={<DollarSign size={32}/>} label="Saldo (Mês)" value={`R$ ${saldoMes.toFixed(2)}`} color={saldoMes >= 0 ? 'green' : 'red'} />
-      </div>
-    </div>
-  )
-}
-
-function StatCard({ icon, label, value, color }) {
-  const colors = {
-    blue: 'bg-blue-500/20 text-blue-400',
-    amber: 'bg-amber-500/20 text-amber-400',
-    green: 'bg-green-500/20 text-green-400',
-    red: 'bg-red-500/20 text-red-400'
-  }
-  return (
+  const StatCard = ({ icon: Icon, label, value, color }) => (
     <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-      <div className={`inline-flex p-3 rounded-lg ${colors[color]} mb-3`}>
-        {icon}
+      <div className="flex items-center justify-between mb-2">
+        <div className={`p-3 rounded-lg bg-${color}-500/20`}>
+          <Icon className={`text-${color}-500`} size={24} />
+        </div>
       </div>
       <p className="text-slate-400 text-sm mb-1">{label}</p>
-      <p className="text-2xl font-bold">{value}</p>
+      <p className="text-2xl font-bold text-white">{value}</p>
     </div>
   )
-}
 
-function LotesView({ lotes, onAdd, onEdit, onDelete }) {
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">Lotes de Aves</h2>
-        <button onClick={onAdd} className="bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-          <Plus size={20} /> Novo Lote
-        </button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
+      <div className="w-24 h-24 bg-amber-500 rounded-full flex items-center justify-center shadow-2xl mb-4 absolute top-6 left-6">
+        <Egg className="text-slate-900" size={48} />
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-slate-700">
-            <tr>
-              <th className="text-left p-4">Lote</th>
-              <th className="text-left p-4">Raça</th>
-              <th className="text-left p-4">Quantidade</th>
-              <th className="text-left p-4">Data Alojamento</th>
-              <th className="text-right p-4">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
+      
+      <div className="max-w-7xl w-full bg-slate-900/80 backdrop-blur rounded-2xl shadow-2xl p-8 border border-slate-700">
+        <div className="mb-8">
+          <h1 className="text-6xl font-bold text-white mb-2">AvesGest</h1>
+          <p className="text-slate-300 text-lg">Gestão de Aves Poedeiras</p>
+        </div>
+
+        {/* Navigation */}
+        <div className="flex gap-3 mb-8 flex-wrap">
+          <NavButton icon={Home} label="Dashboard" view="dashboard" />
+          <NavButton icon={Users} label="Lotes" view="lotes" />
+          <NavButton icon={Egg} label="Produção" view="producao" />
+          <NavButton icon={DollarSign} label="Financeiro" view="financeiro" />
+        </div>
+
+        {/* Dashboard View */}
+        {currentView === 'dashboard' && (
+          <div>
+            <h2 className="text-3xl font-bold text-white mb-6 flex items-center gap-2">
+              <Users className="text-amber-500" size={32} />
+              Dashboard
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <StatCard icon={Users} label="Total de Aves" value={totalAves} color="amber" />
+              <StatCard icon={Egg} label="Produção Hoje" value={producaoHoje} color="blue" />
+              <StatCard icon={TrendingUp} label="Receitas (Mês)" value={`R$ ${receitasMes.toFixed(2)}`} color="green" />
+              <StatCard icon={DollarSign} label="Saldo (Mês)" value={`R$ ${saldoMes.toFixed(2)}`} color={saldoMes >= 0 ? 'green' : 'red'} />
+            </div>
+          </div>
+        )}
+
+        {/* Lotes View */}
+        {currentView === 'lotes' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-white flex items-center gap-2">
+                <Users className="text-amber-500" size={32} />
+                Lotes de Aves
+              </h2>
+              <button
+                onClick={() => openModal('lote')}
+                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg transition-colors"
+              >
+                <Plus size={20} />
+                Novo Lote
+              </button>
+            </div>
+            
             {lotes.length === 0 ? (
-              <tr><td colSpan="5" className="text-center p-8 text-slate-400">Nenhum lote cadastrado</td></tr>
+              <p className="text-slate-400 text-center py-12">Nenhum lote cadastrado</p>
             ) : (
-              lotes.map(lote => (
-                <tr key={lote.id} className="border-t border-slate-700 hover:bg-slate-750">
-                  <td className="p-4">{lote.nome}</td>
-                  <td className="p-4">{lote.raca}</td>
-                  <td className="p-4">{lote.quantidade}</td>
-                  <td className="p-4">{new Date(lote.dataAlojamento).toLocaleDateString('pt-BR')}</td>
-                  <td className="p-4 text-right">
-                    <button onClick={() => onEdit(lote)} className="text-blue-400 hover:text-blue-300 mr-3"><Edit2 size={18}/></button>
-                    <button onClick={() => onDelete(lote.id)} className="text-red-400 hover:text-red-300"><Trash2 size={18}/></button>
-                  </td>
-                </tr>
-              ))
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left text-slate-300 py-3">Lote</th>
+                      <th className="text-left text-slate-300 py-3">Raça</th>
+                      <th className="text-left text-slate-300 py-3">Quantidade</th>
+                      <th className="text-left text-slate-300 py-3">Data</th>
+                      <th className="text-left text-slate-300 py-3">Alojamento</th>
+                      <th className="text-left text-slate-300 py-3">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lotes.map(lote => (
+                      <tr key={lote.id} className="border-b border-slate-800 hover:bg-slate-800/50">
+                        <td className="py-3 text-white">{lote.lote}</td>
+                        <td className="py-3 text-white">{lote.raca}</td>
+                        <td className="py-3 text-white">{lote.quantidade}</td>
+                        <td className="py-3 text-white">{new Date(lote.data).toLocaleDateString('pt-BR')}</td>
+                        <td className="py-3 text-white">{lote.alojamento}</td>
+                        <td className="py-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => openModal('lote', lote)}
+                              className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
+                            >
+                              <Edit2 size={16} className="text-white" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(lote.id, 'lote')}
+                              className="p-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={16} className="text-white" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
+          </div>
+        )}
 
-function ProducaoView({ producao, lotes, onAdd, onEdit, onDelete }) {
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">Produção de Ovos</h2>
-        <button onClick={onAdd} className="bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-          <Plus size={20} /> Registrar Produção
-        </button>
-      </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-slate-700">
-            <tr>
-              <th className="text-left p-4">Data</th>
-              <th className="text-left p-4">Lote</th>
-              <th className="text-left p-4">Ovos Produzidos</th>
-              <th className="text-left p-4">Trincados</th>
-              <th className="text-right p-4">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
+        {/* Produção View */}
+        {currentView === 'producao' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-white flex items-center gap-2">
+                <Egg className="text-amber-500" size={32} />
+                Produção de Ovos
+              </h2>
+              <button
+                onClick={() => openModal('producao')}
+                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg transition-colors"
+              >
+                <Plus size={20} />
+                Registrar Produção
+              </button>
+            </div>
+            
             {producao.length === 0 ? (
-              <tr><td colSpan="5" className="text-center p-8 text-slate-400">Nenhuma produção registrada</td></tr>
+              <p className="text-slate-400 text-center py-12">Nenhuma produção registrada</p>
             ) : (
-              producao.map(p => {
-                const lote = lotes.find(l => l.id === parseInt(p.loteId))
-                return (
-                  <tr key={p.id} className="border-t border-slate-700 hover:bg-slate-750">
-                    <td className="p-4">{new Date(p.data).toLocaleDateString('pt-BR')}</td>
-                    <td className="p-4">{lote?.nome || 'Lote não encontrado'}</td>
-                    <td className="p-4">{p.ovos}</td>
-                    <td className="p-4">{p.trincados || 0}</td>
-                    <td className="p-4 text-right">
-                      <button onClick={() => onEdit(p)} className="text-blue-400 hover:text-blue-300 mr-3"><Edit2 size={18}/></button>
-                      <button onClick={() => onDelete(p.id)} className="text-red-400 hover:text-red-300"><Trash2 size={18}/></button>
-                    </td>
-                  </tr>
-                )
-              })
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left text-slate-300 py-3">Data</th>
+                      <th className="text-left text-slate-300 py-3">Lote</th>
+                      <th className="text-left text-slate-300 py-3">Ovos Produzidos</th>
+                      <th className="text-left text-slate-300 py-3">Trincados</th>
+                      <th className="text-left text-slate-300 py-3">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {producao.map(prod => (
+                      <tr key={prod.id} className="border-b border-slate-800 hover:bg-slate-800/50">
+                        <td className="py-3 text-white">{new Date(prod.data).toLocaleDateString('pt-BR')}</td>
+                        <td className="py-3 text-white">{prod.lote}</td>
+                        <td className="py-3 text-white">{prod.ovos}</td>
+                        <td className="py-3 text-white">{prod.trincados}</td>
+                        <td className="py-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => openModal('producao', prod)}
+                              className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
+                            >
+                              <Edit2 size={16} className="text-white" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(prod.id, 'producao')}
+                              className="p-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={16} className="text-white" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
+          </div>
+        )}
 
-function FinanceiroView({ financeiro, onAdd, onEdit, onDelete }) {
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold">Financeiro</h2>
-        <button onClick={onAdd} className="bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-          <Plus size={20} /> Nova Transação
-        </button>
-      </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-slate-700">
-            <tr>
-              <th className="text-left p-4">Data</th>
-              <th className="text-left p-4">Descrição</th>
-              <th className="text-left p-4">Tipo</th>
-              <th className="text-right p-4">Valor</th>
-              <th className="text-right p-4">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
+        {/* Financeiro View */}
+        {currentView === 'financeiro' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-white flex items-center gap-2">
+                <DollarSign className="text-amber-500" size={32} />
+                Financeiro
+              </h2>
+              <button
+                onClick={() => openModal('financeiro')}
+                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg transition-colors"
+              >
+                <Plus size={20} />
+                Nova Transação
+              </button>
+            </div>
+            
             {financeiro.length === 0 ? (
-              <tr><td colSpan="5" className="text-center p-8 text-slate-400">Nenhuma transação registrada</td></tr>
+              <p className="text-slate-400 text-center py-12">Nenhuma transação registrada</p>
             ) : (
-              financeiro.map(f => (
-                <tr key={f.id} className="border-t border-slate-700 hover:bg-slate-750">
-                  <td className="p-4">{new Date(f.data).toLocaleDateString('pt-BR')}</td>
-                  <td className="p-4">{f.descricao}</td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      f.tipo === 'receita' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                    }`}>
-                      {f.tipo === 'receita' ? 'Receita' : 'Despesa'}
-                    </span>
-                  </td>
-                  <td className={`p-4 text-right font-bold ${
-                    f.tipo === 'receita' ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {f.tipo === 'receita' ? '+' : '-'} R$ {parseFloat(f.valor).toFixed(2)}
-                  </td>
-                  <td className="p-4 text-right">
-                    <button onClick={() => onEdit(f)} className="text-blue-400 hover:text-blue-300 mr-3"><Edit2 size={18}/></button>
-                    <button onClick={() => onDelete(f.id)} className="text-red-400 hover:text-red-300"><Trash2 size={18}/></button>
-                  </td>
-                </tr>
-              ))
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left text-slate-300 py-3">Data</th>
+                      <th className="text-left text-slate-300 py-3">Descrição</th>
+                      <th className="text-left text-slate-300 py-3">Tipo</th>
+                      <th className="text-left text-slate-300 py-3">Valor</th>
+                      <th className="text-left text-slate-300 py-3">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {financeiro.map(fin => (
+                      <tr key={fin.id} className="border-b border-slate-800 hover:bg-slate-800/50">
+                        <td className="py-3 text-white">{new Date(fin.data).toLocaleDateString('pt-BR')}</td>
+                        <td className="py-3 text-white">{fin.descricao}</td>
+                        <td className="py-3">
+                          <span className={`px-3 py-1 rounded-full text-sm ${
+                            fin.tipo === 'receita' 
+                              ? 'bg-green-500/20 text-green-400' 
+                              : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {fin.tipo.charAt(0).toUpperCase() + fin.tipo.slice(1)}
+                          </span>
+                        </td>
+                        <td className={`py-3 font-semibold ${
+                          fin.tipo === 'receita' ? 'text-green-400' : 'text-red-400'
+                        }`}>
+                          {fin.tipo === 'receita' ? '+' : '-'} R$ {parseFloat(fin.valor).toFixed(2)}
+                        </td>
+                        <td className="py-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => openModal('financeiro', fin)}
+                              className="p-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
+                            >
+                              <Edit2 size={16} className="text-white" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(fin.id, 'financeiro')}
+                              className="p-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={16} className="text-white" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </tbody>
-        </table>
+          </div>
+        )}
+
+        {/* Modal */}
+        {showModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+            <div className="bg-slate-800 rounded-2xl p-8 max-w-md w-full border border-slate-700">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-white">
+                  {editingItem ? 'Editar' : 'Novo'} {
+                    modalType === 'lote' ? 'Lote' :
+                    modalType === 'producao' ? 'Produção' :
+                    'Transação'
+                  }
+                </h3>
+                <button onClick={closeModal} className="text-slate-400 hover:text-white">
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {modalType === 'lote' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Lote</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.lote || ''}
+                        onChange={e => setFormData({...formData, lote: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Raça</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.raca || ''}
+                        onChange={e => setFormData({...formData, raca: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Quantidade</label>
+                      <input
+                        type="number"
+                        required
+                        value={formData.quantidade || ''}
+                        onChange={e => setFormData({...formData, quantidade: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Data de Alojamento</label>
+                      <input
+                        type="date"
+                        required
+                        value={formData.data || ''}
+                        onChange={e => setFormData({...formData, data: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Local de Alojamento</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.alojamento || ''}
+                        onChange={e => setFormData({...formData, alojamento: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {modalType === 'producao' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Data</label>
+                      <input
+                        type="date"
+                        required
+                        value={formData.data || ''}
+                        onChange={e => setFormData({...formData, data: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Lote</label>
+                      <select
+                        required
+                        value={formData.lote || ''}
+                        onChange={e => setFormData({...formData, lote: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      >
+                        <option value="">Selecione um lote</option>
+                        {lotes.map(lote => (
+                          <option key={lote.id} value={lote.lote}>{lote.lote} - {lote.raca}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Ovos Produzidos</label>
+                      <input
+                        type="number"
+                        required
+                        value={formData.ovos || ''}
+                        onChange={e => setFormData({...formData, ovos: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Ovos Trincados</label>
+                      <input
+                        type="number"
+                        required
+                        value={formData.trincados || ''}
+                        onChange={e => setFormData({...formData, trincados: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {modalType === 'financeiro' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Data</label>
+                      <input
+                        type="date"
+                        required
+                        value={formData.data || ''}
+                        onChange={e => setFormData({...formData, data: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Descrição</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.descricao || ''}
+                        onChange={e => setFormData({...formData, descricao: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Tipo</label>
+                      <select
+                        required
+                        value={formData.tipo || 'receita'}
+                        onChange={e => setFormData({...formData, tipo: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      >
+                        <option value="receita">Receita</option>
+                        <option value="despesa">Despesa</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">Valor (R$)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={formData.valor || ''}
+                        onChange={e => setFormData({...formData, valor: e.target.value})}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg transition-colors"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  )
-}
-
-function Modal({ children, onClose }) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto border border-slate-700">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function LoteForm({ onSubmit, initialData, onCancel }) {
-  const [formData, setFormData] = useState(initialData || { nome: '', raca: '', quantidade: '', dataAlojamento: new Date().toISOString().split('T')[0] })
-  
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    onSubmit(formData)
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <h3 className="text-xl font-bold mb-4">{initialData ? 'Editar Lote' : 'Novo Lote'}</h3>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Nome do Lote</label>
-          <input type="text" required value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Raça</label>
-          <input type="text" required value={formData.raca} onChange={(e) => setFormData({...formData, raca: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Quantidade de Aves</label>
-          <input type="number" required value={formData.quantidade} onChange={(e) => setFormData({...formData, quantidade: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Data de Alojamento</label>
-          <input type="date" required value={formData.dataAlojamento} onChange={(e) => setFormData({...formData, dataAlojamento: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-      </div>
-      <div className="flex gap-3 mt-6">
-        <button type="button" onClick={onCancel} className="flex-1 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded transition-colors">Cancelar</button>
-        <button type="submit" className="flex-1 bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded transition-colors">Salvar</button>
-      </div>
-    </form>
-  )
-}
-
-function ProducaoForm({ onSubmit, initialData, lotes, onCancel }) {
-  const [formData, setFormData] = useState(initialData || { data: new Date().toISOString().split('T')[0], loteId: '', ovos: '', trincados: '0' })
-  
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    onSubmit(formData)
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <h3 className="text-xl font-bold mb-4">{initialData ? 'Editar Produção' : 'Registrar Produção'}</h3>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Data</label>
-          <input type="date" required value={formData.data} onChange={(e) => setFormData({...formData, data: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Lote</label>
-          <select required value={formData.loteId} onChange={(e) => setFormData({...formData, loteId: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2">
-            <option value="">Selecione um lote</option>
-            {lotes.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Ovos Produzidos</label>
-          <input type="number" required value={formData.ovos} onChange={(e) => setFormData({...formData, ovos: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Ovos Trincados</label>
-          <input type="number" value={formData.trincados} onChange={(e) => setFormData({...formData, trincados: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-      </div>
-      <div className="flex gap-3 mt-6">
-        <button type="button" onClick={onCancel} className="flex-1 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded transition-colors">Cancelar</button>
-        <button type="submit" className="flex-1 bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded transition-colors">Salvar</button>
-      </div>
-    </form>
-  )
-}
-
-function FinanceiroForm({ onSubmit, initialData, onCancel }) {
-  const [formData, setFormData] = useState(initialData || { data: new Date().toISOString().split('T')[0], descricao: '', tipo: 'receita', valor: '' })
-  
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    onSubmit(formData)
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <h3 className="text-xl font-bold mb-4">{initialData ? 'Editar Transação' : 'Nova Transação'}</h3>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Data</label>
-          <input type="date" required value={formData.data} onChange={(e) => setFormData({...formData, data: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Descrição</label>
-          <input type="text" required value={formData.descricao} onChange={(e) => setFormData({...formData, descricao: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Tipo</label>
-          <select required value={formData.tipo} onChange={(e) => setFormData({...formData, tipo: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2">
-            <option value="receita">Receita</option>
-            <option value="despesa">Despesa</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Valor (R$)</label>
-          <input type="number" step="0.01" required value={formData.valor} onChange={(e) => setFormData({...formData, valor: e.target.value})} className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2" />
-        </div>
-      </div>
-      <div className="flex gap-3 mt-6">
-        <button type="button" onClick={onCancel} className="flex-1 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded transition-colors">Cancelar</button>
-        <button type="submit" className="flex-1 bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded transition-colors">Salvar</button>
-      </div>
-    </form>
   )
 }
 
