@@ -1,15 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  LayoutDashboard, Home, ClipboardList, TrendingUp, PlusCircle, 
-  Menu, X, Egg, Bird, Scale, AlertTriangle, Activity, DollarSign, Bell,
-  Sparkles, Bot, Loader2, Info, MessageSquare, Send
+  LayoutDashboard, PlusCircle, Egg, DollarSign, PackageSearch, Users, BarChart4, LogOut,
+  Bird, Scale, AlertTriangle, Activity, Bell, Sparkles, Bot, Loader2, Info, Send, 
+  FileText, Download, X, Menu, ChevronRight, TrendingUp, ClipboardList, ShoppingCart, 
+  Wallet, CheckCircle, Mail, UserPlus, ShieldCheck, ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, ComposedChart
 } from 'recharts';
-import './modern-design.css';
+
 // --- CONFIGURAÇÃO DA API GEMINI ---
-const apiKey = ""; // A chave da API é injetada automaticamente no ambiente
+const apiKey = ""; 
 const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 
 // --- MOCK DATA INICIAL ---
@@ -22,8 +24,19 @@ const mockColetas = [
   { id: 'c1', galpaoId: 'g1', data: '2026-05-20', mortalidadeTotal: 2, ovosTotal: 3800, pesoMedio: 60, racaoFornecida: 500, sobra: 5, precoRacao: 2.10 },
   { id: 'c2', galpaoId: 'g1', data: '2026-05-21', mortalidadeTotal: 1, ovosTotal: 3950, pesoMedio: 61, racaoFornecida: 510, sobra: 2, precoRacao: 2.10 },
   { id: 'c3', galpaoId: 'g1', data: '2026-05-22', mortalidadeTotal: 0, ovosTotal: 4100, pesoMedio: 62, racaoFornecida: 520, sobra: 4, precoRacao: 2.15 },
-  { id: 'c4', galpaoId: 'g1', data: '2026-05-23', mortalidadeTotal: 8, ovosTotal: 3900, pesoMedio: 62, racaoFornecida: 520, sobra: 10, precoRacao: 2.15 }, // Simulação de problema
+  { id: 'c4', galpaoId: 'g1', data: '2026-05-23', mortalidadeTotal: 8, ovosTotal: 3900, pesoMedio: 62, racaoFornecida: 520, sobra: 10, precoRacao: 2.15 },
   { id: 'c5', galpaoId: 'g1', data: '2026-05-24', mortalidadeTotal: 1, ovosTotal: 4150, pesoMedio: 63, racaoFornecida: 530, sobra: 5, precoRacao: 2.15 }
+];
+
+const mockVendas = [
+  { id: 'v1', data: '2026-05-21', qtdDuzias: 300, valorTotal: 2400.00, cliente: 'Mercado Central' },
+  { id: 'v2', data: '2026-05-23', qtdDuzias: 350, valorTotal: 2800.00, cliente: 'Distribuidora Vale' }
+];
+
+const mockEquipe = [
+  { id: 1, nome: 'Larissa França', email: 'larissa@avesgest.com', cargo: 'Zootecnista / Admin', acesso: 'Total', status: 'Ativo' },
+  { id: 2, nome: 'João Pedro', email: 'joao@avesgest.com', cargo: 'Gerente de Produção', acesso: 'Edição', status: 'Ativo' },
+  { id: 3, nome: 'Carlos Silva', email: 'carlos.s@avesgest.com', cargo: 'Operador de Granja', acesso: 'Apenas Coleta', status: 'Inativo' }
 ];
 
 export default function App() {
@@ -32,14 +45,16 @@ export default function App() {
   
   const [galpoes, setGalpoes] = useState(mockGalpoes);
   const [coletas, setColetas] = useState(mockColetas);
+  const [vendas, setVendas] = useState(mockVendas);
+  const [equipe, setEquipe] = useState(mockEquipe);
 
-  // Estados globais para a IA
+  // Estados da IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResponse, setAiResponse] = useState("");
   const [aiContextTitle, setAiContextTitle] = useState("");
 
-  // --- FUNÇÕES UTILITÁRIAS DE API ---
+  // --- FUNÇÕES UTILITÁRIAS ---
   const fetchWithBackoff = async (url, options, retries = 5, delay = 1000) => {
     for (let i = 0; i < retries; i++) {
         try {
@@ -49,7 +64,7 @@ export default function App() {
         } catch (error) {
             if (i === retries - 1) throw error;
             await new Promise(res => setTimeout(res, delay));
-            delay *= 2; // Exponential backoff
+            delay *= 2;
         }
     }
   };
@@ -59,201 +74,433 @@ export default function App() {
     setAiResponse("");
     setAiLoading(true);
     setAiModalOpen(true);
-    
     try {
-        const payload = {
-            contents: [{ parts: [{ text: promptText }] }],
-            systemInstruction: { parts: [{ text: systemInstruction }] }
-        };
-        
+        const payload = { contents: [{ parts: [{ text: promptText }] }], systemInstruction: { parts: [{ text: systemInstruction }] } };
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-        const data = await fetchWithBackoff(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
+        const data = await fetchWithBackoff(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (generatedText) {
-            setAiResponse(generatedText);
-        } else {
-            throw new Error("Resposta inválida da API");
-        }
+        if (generatedText) setAiResponse(generatedText);
+        else throw new Error("Resposta inválida da API");
     } catch (error) {
-        setAiResponse("⚠️ Ocorreu um erro ao consultar o Zootecnista IA. Por favor, tente novamente mais tarde.");
+        setAiResponse("⚠️ Ocorreu um erro ao consultar a IA. Verifique sua conexão ou tente novamente.");
     } finally {
         setAiLoading(false);
     }
   };
 
-  // --- MOTOR DE CÁLCULO ZOOTÉCNICO ---
-  const calcularAvesVivasNaData = (galpaoId, dataReferencia) => {
-    const galpao = galpoes.find(g => g.id === galpaoId);
-    if (!galpao) return 0;
-    const mortalidadeAcumulada = coletas
-      .filter(c => c.galpaoId === galpaoId && new Date(c.data) <= new Date(dataReferencia))
-      .reduce((acc, c) => acc + c.mortalidadeTotal, 0);
-    return galpao.avesAlojadas - mortalidadeAcumulada;
-  };
+  // --- MÉTRICAS GLOBAIS SEGURAS ---
+  const metrics = useMemo(() => {
+      const totalAvesIniciais = galpoes.reduce((acc, g) => acc + g.avesAlojadas, 0);
+      const mortalidadeGeral = coletas.reduce((acc, c) => acc + c.mortalidadeTotal, 0);
+      const totalAvesVivas = totalAvesIniciais - mortalidadeGeral;
+      const taxaMortalidadeGlobal = totalAvesIniciais > 0 ? (mortalidadeGeral / totalAvesIniciais) * 100 : 0;
 
-  const Sidebar = () => (
-    <div className={`bg-emerald-800 text-white w-64 min-h-screen flex flex-col transition-transform transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed z-20 md:relative`}>
-      <div className="p-6 flex items-center justify-between border-b border-emerald-700">
-        <div className="flex items-center gap-2">
-          <Egg className="w-8 h-8 text-yellow-400" />
-          <span className="text-2xl font-bold tracking-wider">AveGest</span>
-        </div>
-        <button className="md:hidden text-white" onClick={() => setIsMobileMenuOpen(false)}><X /></button>
-      </div>
-      <nav className="flex-1 px-4 mt-6 space-y-2">
-        <NavItem id="dashboard" icon={<LayoutDashboard />} label="Dashboard" />
-        <NavItem id="galpoes" icon={<Home />} label="Lotes e Galpões" />
-        <NavItem id="coleta" icon={<ClipboardList />} label="Apontamento Diário" />
-        <NavItem id="relatorios" icon={<TrendingUp />} label="Relatórios (Índices)" />
-        <NavItem id="assistente" icon={<MessageSquare />} label="Consultoria IA ✨" />
-      </nav>
+      const sortedColetas = [...coletas].sort((a,b) => new Date(a.data) - new Date(b.data));
+      const ultimaData = sortedColetas.length > 0 ? sortedColetas[sortedColetas.length - 1].data : null;
       
-      <div className="p-4 border-t border-emerald-700 m-4 rounded-lg bg-emerald-900/50">
-          <div className="flex items-center gap-2 text-emerald-200 text-xs mb-2">
-              <Sparkles className="w-4 h-4 text-yellow-400" />
-              <span>Zootecnia de Precisão</span>
-          </div>
-          <p className="text-[10px] text-emerald-400 leading-tight">Módulos potencializados com IA Gemini para laudos técnicos rápidos.</p>
+      let producaoHoje = 0;
+      if(ultimaData) {
+          producaoHoje = sortedColetas.filter(c => c.data === ultimaData).reduce((acc, c) => acc + c.ovosTotal, 0);
+      }
+      const taxaPosturaHoje = totalAvesVivas > 0 ? (producaoHoje / totalAvesVivas) * 100 : 0;
+
+      const totalOvosProduzidos = coletas.reduce((acc, c) => acc + c.ovosTotal, 0);
+      const totalOvosVendidos = vendas.reduce((acc, v) => acc + (v.qtdDuzias * 12), 0);
+      const estoqueOvosAtual = totalOvosProduzidos - totalOvosVendidos; 
+
+      const receitaTotal = vendas.reduce((acc, v) => acc + v.valorTotal, 0);
+      const custoAlimentarTotal = coletas.reduce((acc, c) => acc + ((c.racaoFornecida - (c.sobra || 0)) * (c.precoRacao || 0)), 0);
+      const lucroBruto = receitaTotal - custoAlimentarTotal;
+
+      return { totalAvesVivas, mortalidadeGeral, taxaMortalidadeGlobal, producaoHoje, taxaPosturaHoje, totalOvosProduzidos, estoqueOvosAtual, receitaTotal, custoAlimentarTotal, lucroBruto, ultimaData };
+  }, [galpoes, coletas, vendas]);
+
+  // --- COMPONENTES DE LAYOUT (TOP NAV) ---
+  const TopNav = () => (
+    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+      <div className="max-w-[1400px] mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+            <div className="bg-red-600 p-1.5 rounded-lg flex items-center justify-center">
+                <Bird className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex flex-col leading-tight">
+                <span className="font-bold text-lg text-slate-800 tracking-tight">AvesGest</span>
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Pro Edition</span>
+            </div>
+        </div>
+        <nav className="hidden lg:flex items-center gap-1">
+            <NavItem id="dashboard" icon={<LayoutDashboard/>} label="Dashboard" />
+            <NavItem id="galpoes" icon={<PlusCircle/>} label="Cadastrar" />
+            <NavItem id="coleta" icon={<Egg/>} label="Produção" />
+            <NavItem id="financeiro" icon={<DollarSign/>} label="Financeiro" />
+            <NavItem id="estoque" icon={<PackageSearch/>} label="Estoque" />
+            <NavItem id="equipe" icon={<Users/>} label="Equipe" />
+            <NavItem id="relatorios" icon={<BarChart4/>} label="Relatórios" />
+            <NavItem id="copiloto" icon={<Sparkles/>} label="Copiloto IA" isAI={true} />
+        </nav>
+        <div className="hidden lg:flex items-center">
+            <button className="flex items-center gap-2 text-red-500 hover:text-red-700 font-medium px-4 py-2 transition-colors text-sm">
+                <LogOut className="w-4 h-4"/> Sair
+            </button>
+        </div>
+        <button className="lg:hidden p-2 text-slate-600" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+            {isMobileMenuOpen ? <X className="w-6 h-6"/> : <Menu className="w-6 h-6"/>}
+        </button>
       </div>
-    </div>
+      {isMobileMenuOpen && (
+        <div className="lg:hidden absolute top-16 left-0 right-0 bg-white border-b border-slate-200 shadow-lg px-4 py-4 flex flex-col gap-2">
+            <NavItem id="dashboard" icon={<LayoutDashboard/>} label="Dashboard" mobile/>
+            <NavItem id="galpoes" icon={<PlusCircle/>} label="Cadastrar" mobile/>
+            <NavItem id="coleta" icon={<Egg/>} label="Produção" mobile/>
+            <NavItem id="financeiro" icon={<DollarSign/>} label="Financeiro" mobile/>
+            <NavItem id="estoque" icon={<PackageSearch/>} label="Estoque" mobile/>
+            <NavItem id="equipe" icon={<Users/>} label="Equipe" mobile/>
+            <NavItem id="relatorios" icon={<BarChart4/>} label="Relatórios" mobile/>
+            <NavItem id="copiloto" icon={<Sparkles/>} label="Copiloto IA" isAI={true} mobile/>
+        </div>
+      )}
+    </header>
   );
 
-  const NavItem = ({ id, icon, label }) => {
+  const NavItem = ({ id, icon, label, isAI, mobile }) => {
     const isActive = activeTab === id;
+    let baseClasses = `flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-all text-sm cursor-pointer ${mobile ? 'w-full' : ''}`;
+    let stateClasses = isActive ? "bg-red-600 text-white shadow-sm" : isAI ? "text-indigo-600 bg-indigo-50 hover:bg-indigo-100" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900";
     return (
-      <button
-        onClick={() => { setActiveTab(id); setIsMobileMenuOpen(false); }}
-        className={`flex items-center gap-3 px-4 py-3 w-full text-left rounded-lg transition-colors ${isActive ? 'bg-emerald-600 text-white shadow' : 'text-emerald-100 hover:bg-emerald-700 hover:text-white'}`}
-      >
-        {React.cloneElement(icon, { className: 'w-5 h-5' })}
-        <span className="font-medium">{label}</span>
-      </button>
+      <div onClick={() => { setActiveTab(id); setIsMobileMenuOpen(false); }} className={`${baseClasses} ${stateClasses}`}>
+        {React.cloneElement(icon, { className: 'w-4 h-4' })}
+        <span>{label}</span>
+      </div>
+    );
+  };
+
+  const KpiCard = ({ title, value, subtitle, icon, color }) => {
+    const colors = {
+        blue: "text-blue-500 bg-blue-50",
+        emerald: "text-green-500 bg-green-50",
+        amber: "text-orange-500 bg-orange-50",
+        red: "text-red-500 bg-red-50",
+        indigo: "text-indigo-500 bg-indigo-50"
+    };
+    return (
+      <div className={`p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow bg-white`}>
+          <div className="flex justify-between items-start mb-2">
+              <p className="text-sm font-semibold text-slate-500 leading-tight">{title}</p>
+              <div className={`p-2 rounded-xl ${colors[color] || colors.blue}`}>{React.cloneElement(icon, { className: 'w-5 h-5' })}</div>
+          </div>
+          <div>
+              <h3 className="text-2xl font-bold text-slate-800 tracking-tight">{value}</h3>
+              <p className="text-xs font-medium text-slate-400 mt-1">{subtitle}</p>
+          </div>
+      </div>
     );
   };
 
   // --- VIEWS ---
-  const DashboardView = () => {
-    const totalAvesIniciais = galpoes.reduce((acc, g) => acc + g.avesAlojadas, 0);
-    const mortalidadeGeral = coletas.reduce((acc, c) => acc + c.mortalidadeTotal, 0);
-    const totalAvesVivas = totalAvesIniciais - mortalidadeGeral;
 
+  const DashboardView = () => {
+    // Preparar dados seguros para o gráfico misto (Produção vs Mortalidade)
     const chartData = useMemo(() => {
-        const dataMap = {};
+        const map = {};
         coletas.forEach(c => {
-            if(!dataMap[c.data]) dataMap[c.data] = { data: c.data, ovos: 0, mortalidade: 0 };
-            dataMap[c.data].ovos += c.ovosTotal;
-            dataMap[c.data].mortalidade += c.mortalidadeTotal;
+            if(!map[c.data]) map[c.data] = { data: c.data, ovos: 0, mortalidade: 0 };
+            map[c.data].ovos += c.ovosTotal;
+            map[c.data].mortalidade += c.mortalidadeTotal;
         });
-        return Object.values(dataMap)
-            .sort((a, b) => new Date(a.data) - new Date(b.data))
+        return Object.values(map)
+            .sort((a,b) => new Date(a.data) - new Date(b.data))
             .slice(-7)
-            .map(d => ({ ...d, data: d.data.split('-').slice(1).join('/') }));
+            .map(d => ({...d, dataFormatada: d.data.split('-').slice(1).reverse().join('/')}));
     }, [coletas]);
 
-    const alertas = useMemo(() => {
-        const avisos = [];
-        galpoes.forEach(g => {
-            const coletasDoGalpao = coletas.filter(c => c.galpaoId === g.id).sort((a,b) => new Date(a.data) - new Date(b.data));
-            if(coletasDoGalpao.length === 0) return;
-            const ultima = coletasDoGalpao[coletasDoGalpao.length - 1];
-            const avesVivas = calcularAvesVivasNaData(g.id, ultima.data);
-            
-            const mortPercent = (ultima.mortalidadeTotal / avesVivas) * 100;
-            if(mortPercent > 0.15) {
-                avisos.push({ 
-                    tipo: 'critico', 
-                    texto: `Alta mortalidade no ${g.nome} (${ultima.mortalidadeTotal} aves - ${mortPercent.toFixed(2)}%) em ${ultima.data}.`,
-                    contextoIa: `Lote ${g.nome}, ${g.idadeSemanas} semanas, sistema ${g.sistema}. Aves vivas: ${avesVivas}. Ocorreu uma mortalidade repentina de ${ultima.mortalidadeTotal} aves num único dia (${mortPercent.toFixed(2)}%).`
-                });
-            }
-            
-            const prodPercent = (ultima.ovosTotal / avesVivas) * 100;
-            if(prodPercent < 85 && g.idadeSemanas > 20 && g.idadeSemanas < 60) {
-                avisos.push({ 
-                    tipo: 'alerta', 
-                    texto: `Produção baixa no ${g.nome} (${prodPercent.toFixed(1)}%). Verifique o consumo de ração e ambiência.`,
-                    contextoIa: `Lote ${g.nome}, ${g.idadeSemanas} semanas, sistema ${g.sistema}. Aves vivas: ${avesVivas}. A produção de ovos caiu para ${prodPercent.toFixed(1)}%, que é baixo para o pico de produção (idade 20-60 semanas).`
-                });
-            }
-        });
-        return avisos;
-    }, [coletas, galpoes]);
-
-    const handleConsultarAlertaIA = (alerta) => {
-        const systemInstruction = "Você é um Médico Veterinário e Zootecnista especialista em patologia e manejo de aves de postura comercial. O usuário apresentará um alerta do sistema sobre o plantel. Forneça diagnósticos diferenciais breves e 3 recomendações emergenciais de manejo focadas na resolução da crise. Evite textos muito longos.";
-        const prompt = `Analise este alerta gerado pela nossa granja de postura: "${alerta.texto}". Contexto do lote: ${alerta.contextoIa}. O que pode estar causando isso e quais ações emergenciais devo tomar hoje?`;
-        callGeminiIA(prompt, systemInstruction, "Diagnóstico Inteligente de Alerta");
-    };
-
     return (
-      <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
-        <h1 className="text-3xl font-bold text-slate-800 mb-8">Painel de Controle</h1>
+      <div className="p-6 max-w-[1400px] mx-auto space-y-8 animate-fade-in pb-20">
+        <div>
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><LayoutDashboard className="w-7 h-7 text-slate-700"/> Dashboard</h1>
+            <p className="text-slate-500 mt-1">Visão geral da operação. Última atualização: {metrics.ultimaData ? metrics.ultimaData.split('-').reverse().join('/') : 'Hoje'}.</p>
+        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatCard title="Total de Aves (Ativas)" value={totalAvesVivas.toLocaleString('pt-BR')} icon={<Bird />} color="text-blue-600" bg="bg-white border border-slate-200" />
-          <StatCard title="Galpões Ativos" value={galpoes.length} icon={<Home />} color="text-emerald-600" bg="bg-white border border-slate-200" />
-          <StatCard title="Total de Coletas" value={coletas.length} icon={<ClipboardList />} color="text-purple-600" bg="bg-white border border-slate-200" />
-          <StatCard title="Mortalidade Acumulada" value={mortalidadeGeral} icon={<AlertTriangle />} color="text-red-600" bg="bg-white border border-slate-200" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard title="Produção (Últ. Dia)" value={metrics.producaoHoje.toLocaleString('pt-BR')} subtitle="ovos coletados" icon={<Egg />} color="blue" />
+          <KpiCard title="Taxa de Postura" value={`${metrics.taxaPosturaHoje.toFixed(1)}%`} subtitle="eficiência do plantel" icon={<Activity />} color={metrics.taxaPosturaHoje > 85 ? "emerald" : "amber"} />
+          <KpiCard title="Mortalidade Acum." value={`${metrics.taxaMortalidadeGlobal.toFixed(2)}%`} subtitle={`${metrics.mortalidadeGeral} aves perdidas`} icon={<AlertTriangle />} color="red" />
+          <KpiCard title="Resultado Bruto" value={`R$ ${metrics.lucroBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`} subtitle="Receita - Custo Ração" icon={<TrendingUp />} color={metrics.lucroBruto >= 0 ? "emerald" : "red"} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
-                <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-emerald-600" /> Curva de Produção Global (Últimos 7 dias)
-                </h2>
-                <div className="h-72">
-                    {chartData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData}>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 lg:col-span-2">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-lg font-bold text-slate-800">Evolução: Produção vs Mortalidade</h2>
+                    <span className="px-3 py-1 bg-slate-50 text-slate-600 border border-slate-200 rounded-full text-xs font-semibold">Últimos 7 dias</span>
+                </div>
+                <div className="h-72 w-full">
+                     {chartData.length > 0 ? (
+                         <ResponsiveContainer width="100%" height="100%">
+                             <ComposedChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis dataKey="data" stroke="#64748b" fontSize={12} />
-                                <YAxis yAxisId="left" stroke="#64748b" fontSize={12} />
+                                <XAxis dataKey="dataFormatada" stroke="#94a3b8" fontSize={12} />
+                                <YAxis yAxisId="left" stroke="#94a3b8" fontSize={12} />
                                 <YAxis yAxisId="right" orientation="right" stroke="#ef4444" fontSize={12} />
-                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                                <Legend />
-                                <Line yAxisId="left" type="monotone" name="Ovos Produzidos" dataKey="ovos" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                                <Line yAxisId="right" type="step" name="Mortalidade" dataKey="mortalidade" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <div className="h-full flex items-center justify-center text-slate-400">Sem dados suficientes para o gráfico.</div>
-                    )}
+                                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
+                                <Legend wrapperStyle={{fontSize: '12px'}}/>
+                                <Bar yAxisId="left" dataKey="ovos" fill="#3b82f6" name="Ovos Produzidos" radius={[4,4,0,0]} barSize={40} />
+                                <Line yAxisId="right" type="monotone" dataKey="mortalidade" stroke="#ef4444" name="Mortalidade (Aves)" strokeWidth={3} dot={{r:4}} />
+                             </ComposedChart>
+                         </ResponsiveContainer>
+                     ) : (
+                         <div className="h-full flex items-center justify-center text-slate-400">Dados insuficientes para gerar o gráfico.</div>
+                     )}
                 </div>
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
-                <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <Bell className="w-5 h-5 text-amber-500" /> Alertas do Sistema
-                </h2>
-                <div className="flex-1 overflow-y-auto space-y-3">
-                    {alertas.length === 0 ? (
-                        <div className="text-sm text-slate-500 text-center mt-10">Tudo operando dentro da normalidade.</div>
-                    ) : (
-                        alertas.map((alerta, idx) => (
-                            <div key={idx} className={`p-4 rounded-lg border text-sm flex flex-col gap-3 ${alerta.tipo === 'critico' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-                                <div>
-                                    <strong>{alerta.tipo === 'critico' ? 'CRÍTICO: ' : 'ATENÇÃO: '}</strong>
-                                    {alerta.texto}
-                                </div>
-                                <button 
-                                    onClick={() => handleConsultarAlertaIA(alerta)}
-                                    className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-md font-semibold text-xs transition-colors shadow-sm ${alerta.tipo === 'critico' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-amber-600 hover:bg-amber-700 text-white'}`}
-                                >
-                                    <Sparkles className="w-3 h-3" /> Consultar Zootecnista IA
-                                </button>
-                            </div>
-                        ))
-                    )}
+            <div className="space-y-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center items-center text-center">
+                    <div className="p-4 bg-orange-50 text-orange-500 rounded-full mb-4"><PackageSearch className="w-8 h-8"/></div>
+                    <h2 className="text-slate-500 font-medium mb-1">Estoque Físico Estimado</h2>
+                    <p className="text-4xl font-black text-slate-800">{Math.floor(metrics.estoqueOvosAtual / 12).toLocaleString('pt-BR')} <span className="text-lg font-medium text-slate-400">dz</span></p>
+                    <button onClick={() => setActiveTab('estoque')} className="mt-4 text-red-600 text-sm font-semibold hover:text-red-700 flex items-center gap-1">Ver Detalhes <ChevronRight className="w-4 h-4"/></button>
+                </div>
+
+                <div className="bg-red-50 p-6 rounded-2xl border border-red-100">
+                    <h2 className="text-red-800 font-bold flex items-center gap-2 mb-2"><Bell className="w-5 h-5" /> Alertas Ativos</h2>
+                    <p className="text-sm text-red-700 leading-relaxed mb-4">
+                        O sistema detectou variações nos índices de produtividade na última coleta registrada.
+                    </p>
+                    <button onClick={() => setActiveTab('copiloto')} className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 rounded-xl text-sm shadow-sm transition-colors flex justify-center items-center gap-2">
+                        <Sparkles className="w-4 h-4"/> Diagnosticar com IA
+                    </button>
                 </div>
             </div>
         </div>
       </div>
     );
+  };
+
+  const EstoqueView = () => {
+      // Unifica coletas (entradas) e vendas (saídas) no Livro Razão
+      const extrato = useMemo(() => {
+          const entradas = coletas.map(c => ({ id: `e-${c.id}`, data: c.data, tipo: 'ENTRADA', desc: `Coleta (Galpão ${galpoes.find(g=>g.id===c.galpaoId)?.nome || c.galpaoId})`, qtd: c.ovosTotal / 12 }));
+          const saidas = vendas.map(v => ({ id: `s-${v.id}`, data: v.data, tipo: 'SAÍDA', desc: `Venda para ${v.cliente}`, qtd: v.qtdDuzias }));
+          return [...entradas, ...saidas].sort((a,b) => new Date(b.data) - new Date(a.data));
+      }, [coletas, vendas, galpoes]);
+
+      const ticketMedio = vendas.length > 0 ? (metrics.receitaTotal / (metrics.totalOvosProduzidos - metrics.estoqueOvosAtual)*12) : 0;
+      const valorEstimadoEstoque = Math.floor(metrics.estoqueOvosAtual / 12) * ticketMedio;
+
+      return (
+        <div className="p-6 max-w-[1400px] mx-auto space-y-8 animate-fade-in pb-20">
+            <div>
+                <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><PackageSearch className="w-7 h-7 text-slate-700"/> Controle de Estoque Físico</h1>
+                <p className="text-slate-500 mt-1">Gestão unificada de ovos coletados e expedidos (Baseado em FIFO).</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl shadow-md border border-slate-700 text-white relative overflow-hidden">
+                    <PackageSearch className="absolute right-[-10%] top-[-10%] w-32 h-32 opacity-10" />
+                    <p className="text-slate-300 font-medium mb-1">Saldo Atual Disponível</p>
+                    <h3 className="text-4xl font-black">{Math.floor(metrics.estoqueOvosAtual / 12).toLocaleString('pt-BR')} <span className="text-xl font-normal text-slate-400">dúzias</span></h3>
+                    <p className="text-sm mt-3 text-emerald-400 flex items-center gap-1"><CheckCircle className="w-4 h-4"/> {metrics.estoqueOvosAtual.toLocaleString('pt-BR')} unidades no total</p>
+                </div>
+                <KpiCard title="Total Produzido (Histórico)" value={`${Math.floor(metrics.totalOvosProduzidos / 12).toLocaleString('pt-BR')} dz`} subtitle="Entradas" icon={<ArrowDownRight />} color="blue" />
+                <KpiCard title="Valor Estimado em Estoque" value={`R$ ${valorEstimadoEstoque.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`} subtitle={`Baseado no Ticket Médio atual`} icon={<Wallet />} color="emerald" />
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-slate-800">Livro de Movimentação (Kardex)</h2>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-600">
+                        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs">
+                            <tr>
+                                <th className="px-6 py-4 border-b border-slate-200">Data</th>
+                                <th className="px-6 py-4 border-b border-slate-200">Tipo</th>
+                                <th className="px-6 py-4 border-b border-slate-200">Descrição</th>
+                                <th className="px-6 py-4 border-b border-slate-200">Quantidade</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {extrato.map(mov => (
+                                <tr key={mov.id} className="hover:bg-slate-50">
+                                    <td className="px-6 py-4 font-medium">{mov.data.split('-').reverse().join('/')}</td>
+                                    <td className="px-6 py-4">
+                                        <span className={`px-2.5 py-1 text-xs font-bold rounded-lg ${mov.tipo === 'ENTRADA' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-red-50 text-red-600 border border-red-100'}`}>
+                                            {mov.tipo}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">{mov.desc}</td>
+                                    <td className={`px-6 py-4 font-bold ${mov.tipo === 'ENTRADA' ? 'text-blue-600' : 'text-red-500'}`}>
+                                        {mov.tipo === 'ENTRADA' ? '+' : '-'} {mov.qtd.toLocaleString('pt-BR', {maximumFractionDigits: 1})} dz
+                                    </td>
+                                </tr>
+                            ))}
+                            {extrato.length === 0 && <tr><td colSpan="4" className="text-center py-8 text-slate-400">Nenhuma movimentação registrada.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+      );
+  };
+
+  const EquipeView = () => {
+    const [novoMembro, setNovoMembro] = useState(false);
+    
+    return (
+        <div className="p-6 max-w-[1400px] mx-auto space-y-8 animate-fade-in pb-20">
+            <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><Users className="w-7 h-7 text-slate-700"/> Gestão de Equipe</h1>
+                    <p className="text-slate-500 mt-1">Gerencie os acessos e permissões dos funcionários da granja.</p>
+                </div>
+                <button onClick={() => setNovoMembro(!novoMembro)} className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors font-medium">
+                    <UserPlus className="w-5 h-5" /> Convidar Membro
+                </button>
+            </div>
+
+            {novoMembro && (
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
+                    <h2 className="text-lg font-bold mb-4 text-slate-800">Enviar Convite de Acesso</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div><label className="block text-sm font-medium text-slate-600 mb-1">E-mail do Funcionário</label><input type="email" placeholder="email@exemplo.com" className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-600 mb-1">Nível de Acesso</label>
+                            <select className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500 bg-white">
+                                <option>Apenas Coleta Diária</option>
+                                <option>Acesso Completo (Admin)</option>
+                                <option>Apenas Leitura / Relatórios</option>
+                            </select>
+                        </div>
+                        <div className="flex items-end">
+                            <button onClick={() => { alert('Convite simulado com sucesso!'); setNovoMembro(false); }} className="w-full bg-slate-800 text-white font-medium py-2.5 rounded-xl hover:bg-slate-900 transition-colors">Enviar Convite</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {equipe.map(m => (
+                    <div key={m.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col hover:shadow-md transition-shadow">
+                        <div className="flex items-start gap-4 mb-4">
+                            <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center flex-shrink-0 border border-slate-200">
+                                {m.nome.split(' ').map(n=>n[0]).join('').substring(0,2)}
+                            </div>
+                            <div className="flex-1 overflow-hidden">
+                                <h3 className="font-bold text-lg text-slate-800 truncate">{m.nome}</h3>
+                                <p className="text-sm text-slate-500 truncate">{m.cargo}</p>
+                            </div>
+                            {m.status === 'Ativo' ? 
+                                <span className="w-3 h-3 bg-green-500 rounded-full flex-shrink-0 mt-2 shadow-sm border border-white"></span> : 
+                                <span className="w-3 h-3 bg-slate-300 rounded-full flex-shrink-0 mt-2 shadow-sm border border-white"></span>
+                            }
+                        </div>
+                        <div className="mt-auto space-y-2 pt-4 border-t border-slate-50">
+                            <div className="flex items-center gap-2 text-sm text-slate-600"><Mail className="w-4 h-4 text-slate-400"/> <span className="truncate">{m.email}</span></div>
+                            <div className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-slate-400"/> Permissão: <strong>{m.acesso}</strong></div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+  };
+
+  const FinanceiroView = () => {
+      const [novaVenda, setNovaVenda] = useState({ data: new Date().toISOString().split('T')[0], qtdDuzias: '', valorTotal: '', cliente: '' });
+      const [mensagem, setMensagem] = useState("");
+
+      const handleAddVenda = (e) => {
+          e.preventDefault();
+          setVendas([...vendas, { id: `v${Date.now()}`, data: novaVenda.data, qtdDuzias: Number(novaVenda.qtdDuzias), valorTotal: Number(novaVenda.valorTotal), cliente: novaVenda.cliente }]);
+          setMensagem("Venda registrada com sucesso! DRE atualizado.");
+          setNovaVenda({...novaVenda, qtdDuzias: '', valorTotal: '', cliente: ''});
+          setTimeout(() => setMensagem(""), 4000);
+      };
+
+      return (
+        <div className="p-6 max-w-[1400px] mx-auto space-y-8 animate-fade-in pb-20">
+            <div>
+                <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><DollarSign className="w-7 h-7 text-slate-700"/> Financeiro</h1>
+                <p className="text-slate-500 mt-1">Gestão de vendas e DRE simplificado.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 lg:col-span-2">
+                    <h2 className="text-xl font-bold text-slate-800 mb-6 border-b border-slate-100 pb-3">Demonstrativo de Resultado (DRE)</h2>
+                    <div className="space-y-5">
+                        <div className="flex justify-between text-lg font-medium text-slate-600">
+                            <span>Receitas Brutas (Venda de Ovos)</span>
+                            <span className="text-green-600 font-bold">R$ {metrics.receitaTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="flex justify-between text-lg font-medium text-slate-600">
+                            <span>Custos Variáveis (Ração)</span>
+                            <span className="text-red-500 font-bold">- R$ {metrics.custoAlimentarTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="pt-5 border-t border-slate-200 flex justify-between text-xl font-black text-slate-800">
+                            <span>Margem Bruta</span>
+                            <span className={metrics.lucroBruto >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                R$ {metrics.lucroBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 className="text-lg font-bold text-slate-800 mb-4">Nova Receita</h2>
+                    {mensagem && <div className="mb-4 p-3 bg-green-50 text-green-700 text-sm rounded-lg font-medium">{mensagem}</div>}
+                    <form onSubmit={handleAddVenda} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+                            <input required type="date" value={novaVenda.data} onChange={(e) => setNovaVenda({...novaVenda, data: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:border-red-500 outline-none" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
+                            <input required type="text" value={novaVenda.cliente} onChange={(e) => setNovaVenda({...novaVenda, cliente: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl focus:border-red-500 outline-none" placeholder="Ex: Mercado Local" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Qtd (Dúzias)</label>
+                                <input required type="number" value={novaVenda.qtdDuzias} onChange={(e) => setNovaVenda({...novaVenda, qtdDuzias: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl focus:border-red-500 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Valor (R$)</label>
+                                <input required type="number" step="0.01" value={novaVenda.valorTotal} onChange={(e) => setNovaVenda({...novaVenda, valorTotal: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl focus:border-red-500 outline-none" />
+                            </div>
+                        </div>
+                        <button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-colors shadow-sm">Registrar</button>
+                    </form>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-6 border-b border-slate-100">
+                    <h2 className="text-lg font-bold text-slate-800">Histórico de Receitas</h2>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-600">
+                        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs">
+                            <tr>
+                                <th className="px-6 py-4 border-b border-slate-200">Data</th>
+                                <th className="px-6 py-4 border-b border-slate-200">Cliente</th>
+                                <th className="px-6 py-4 border-b border-slate-200">Volume</th>
+                                <th className="px-6 py-4 border-b border-slate-200">Receita</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {vendas.slice().reverse().map(v => (
+                                <tr key={v.id} className="hover:bg-slate-50">
+                                    <td className="px-6 py-4 font-medium">{v.data.split('-').reverse().join('/')}</td>
+                                    <td className="px-6 py-4">{v.cliente}</td>
+                                    <td className="px-6 py-4">{v.qtdDuzias} dz</td>
+                                    <td className="px-6 py-4 font-bold text-green-600">R$ {v.valorTotal.toFixed(2)}</td>
+                                </tr>
+                            ))}
+                            {vendas.length === 0 && <tr><td colSpan="4" className="text-center py-8 text-slate-400">Nenhuma receita registrada.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+      );
   };
 
   const GalpoesView = () => {
@@ -276,35 +523,38 @@ export default function App() {
     };
 
     return (
-        <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-slate-800">Lotes e Galpões</h1>
+        <div className="p-6 max-w-[1400px] mx-auto space-y-8 animate-fade-in pb-20">
+            <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><PlusCircle className="w-7 h-7 text-slate-700"/> Lotes e Galpões</h1>
+                    <p className="text-slate-500 mt-1">Gerenciamento de lotes e alojamentos ativos.</p>
+                </div>
                 {!isAdding && (
-                    <button onClick={() => setIsAdding(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow transition-colors">
-                        <PlusCircle className="w-5 h-5" /> Novo Lote
+                    <button onClick={() => setIsAdding(true)} className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm transition-colors font-medium">
+                        <PlusCircle className="w-5 h-5" /> Adicionar Lote
                     </button>
                 )}
             </div>
 
             {isAdding && (
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-200 mb-8">
-                    <h2 className="text-lg font-bold mb-4 text-emerald-800">Cadastrar Novo Lote/Galpão</h2>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 className="text-lg font-bold mb-6 text-slate-800">Novo Lote/Galpão</h2>
                     <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700">Identificação (Nome)</label><input required type="text" value={novoGalpao.nome} onChange={e => setNovoGalpao({...novoGalpao, nome: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700">Data de Entrada</label><input required type="date" value={novoGalpao.dataEntrada} onChange={e => setNovoGalpao({...novoGalpao, dataEntrada: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700">Aves Iniciais</label><input required type="number" value={novoGalpao.aves} onChange={e => setNovoGalpao({...novoGalpao, aves: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700">Idade (Semanas)</label><input required type="number" value={novoGalpao.idade} onChange={e => setNovoGalpao({...novoGalpao, idade: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700">Sistema</label>
-                            <select value={novoGalpao.sistema} onChange={e => setNovoGalpao({...novoGalpao, sistema: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500">
+                        <div><label className="block text-sm font-medium text-slate-600 mb-1">Nome/Identificação</label><input required type="text" value={novoGalpao.nome} onChange={e => setNovoGalpao({...novoGalpao, nome: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-600 mb-1">Data de Entrada</label><input required type="date" value={novoGalpao.dataEntrada} onChange={e => setNovoGalpao({...novoGalpao, dataEntrada: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-600 mb-1">Aves Iniciais</label><input required type="number" value={novoGalpao.aves} onChange={e => setNovoGalpao({...novoGalpao, aves: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-600 mb-1">Idade Inicial (Semanas)</label><input required type="number" value={novoGalpao.idade} onChange={e => setNovoGalpao({...novoGalpao, idade: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-600 mb-1">Sistema</label>
+                            <select value={novoGalpao.sistema} onChange={e => setNovoGalpao({...novoGalpao, sistema: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500 bg-white">
                                 <option value="GAIOLA">Gaiolas</option><option value="CAGE_FREE">Cage Free (Piso)</option>
                             </select>
                         </div>
                         {novoGalpao.sistema === 'CAGE_FREE' && (
-                            <div><label className="block text-sm font-medium text-slate-700">Área Útil (m²)</label><input required type="number" value={novoGalpao.area} onChange={e => setNovoGalpao({...novoGalpao, area: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
+                            <div><label className="block text-sm font-medium text-slate-600 mb-1">Área Útil (m²)</label><input required type="number" value={novoGalpao.area} onChange={e => setNovoGalpao({...novoGalpao, area: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
                         )}
-                        <div className="lg:col-span-3 flex justify-end gap-3 mt-2">
-                            <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Cancelar</button>
-                            <button type="submit" className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Salvar Cadastro</button>
+                        <div className="lg:col-span-3 flex justify-end gap-3 mt-4">
+                            <button type="button" onClick={() => setIsAdding(false)} className="px-5 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors">Cancelar</button>
+                            <button type="submit" className="px-6 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 shadow-sm transition-colors">Salvar Lote</button>
                         </div>
                     </form>
                 </div>
@@ -312,18 +562,18 @@ export default function App() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {galpoes.map(g => (
-                    <div key={g.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow relative overflow-hidden">
-                        <div className={`absolute top-0 left-0 w-1 h-full ${g.sistema === 'CAGE_FREE' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                        <div className="flex justify-between items-start mb-4">
-                            <h3 className="font-bold text-lg text-slate-800">{g.nome}</h3>
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${g.sistema === 'CAGE_FREE' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                    <div key={g.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden flex flex-col">
+                        <div className={`absolute top-0 left-0 w-1.5 h-full ${g.sistema === 'CAGE_FREE' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                        <div className="flex justify-between items-start mb-6 pl-2">
+                            <h3 className="font-bold text-lg text-slate-800 leading-tight">{g.nome}</h3>
+                            <span className={`px-2.5 py-1 text-xs font-bold rounded-lg ${g.sistema === 'CAGE_FREE' ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}`}>
                                 {g.sistema === 'CAGE_FREE' ? 'Cage Free' : 'Gaiolas'}
                             </span>
                         </div>
-                        <div className="space-y-2 text-sm text-slate-600">
-                            <p><strong>Aves Alojadas:</strong> {g.avesAlojadas.toLocaleString('pt-BR')} un</p>
-                            <p><strong>Idade Entrada:</strong> {g.idadeSemanas} semanas</p>
-                            <p><strong>Data Entrada:</strong> {new Date(g.dataEntrada).toLocaleDateString('pt-BR')}</p>
+                        <div className="space-y-3 text-sm text-slate-600 pl-2 mt-auto">
+                            <div className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400">Aves Alojadas</span><span className="font-bold text-slate-700">{g.avesAlojadas.toLocaleString('pt-BR')} un</span></div>
+                            <div className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400">Idade Inicial</span><span className="font-bold text-slate-700">{g.idadeSemanas} semanas</span></div>
+                            <div className="flex justify-between"><span className="text-slate-400">Data Entrada</span><span className="font-bold text-slate-700">{new Date(g.dataEntrada).toLocaleDateString('pt-BR')}</span></div>
                         </div>
                     </div>
                 ))}
@@ -335,8 +585,6 @@ export default function App() {
   const ColetaDiariaView = () => {
     const [galpaoId, setGalpaoId] = useState(galpoes.length > 0 ? galpoes[0].id : '');
     const [data, setData] = useState(new Date().toISOString().split('T')[0]);
-    
-    // Estados do Formulário
     const [mortProlapso, setMortProlapso] = useState('');
     const [mortCanibalismo, setMortCanibalismo] = useState('');
     const [mortNatural, setMortNatural] = useState('');
@@ -345,19 +593,16 @@ export default function App() {
     const [pesoMedio, setPesoMedio] = useState('');
     const [racaoFornecida, setRacaoFornecida] = useState('');
     const [sobraRacao, setSobraRacao] = useState('');
-    const [precoRacao, setPrecoRacao] = useState(''); // Novo Campo Financeiro
-    
-    const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
+    const [precoRacao, setPrecoRacao] = useState('');
+    const [mensagem, setMensagem] = useState("");
 
     const handleSubmit = (e) => {
       e.preventDefault();
-      const mortalidadeTotal = Number(mortProlapso) + Number(mortCanibalismo) + Number(mortNatural) + Number(mortSubita);
-      
       const novaColeta = {
         id: `c${Date.now()}`,
         galpaoId,
         data,
-        mortalidadeTotal,
+        mortalidadeTotal: Number(mortProlapso) + Number(mortCanibalismo) + Number(mortNatural) + Number(mortSubita),
         ovosTotal: Number(ovosTotal),
         pesoMedio: Number(pesoMedio),
         racaoFornecida: Number(racaoFornecida),
@@ -366,69 +611,65 @@ export default function App() {
       };
 
       setColetas([...coletas, novaColeta]);
-      setMensagem({ tipo: 'sucesso', texto: 'Apontamento diário registrado com sucesso!' });
+      setMensagem('Apontamento registrado!');
       
       setOvosTotal(''); setRacaoFornecida(''); setSobraRacao(''); setMortProlapso(''); setMortCanibalismo(''); setMortNatural(''); setMortSubita('');
-      setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
+      setTimeout(() => setMensagem(""), 4000);
     };
 
     return (
-      <div className="p-6 max-w-4xl mx-auto space-y-6 animate-fade-in">
-        <h1 className="text-3xl font-bold text-slate-800">Apontamento Diário</h1>
-        {mensagem.texto && (
-          <div className="p-4 rounded-lg font-medium bg-green-100 text-green-800 border border-green-200 shadow-sm flex items-center gap-2">
-            <ClipboardList className="w-5 h-5" /> {mensagem.texto}
+      <div className="p-6 max-w-[1000px] mx-auto space-y-6 animate-fade-in pb-20">
+        <div>
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><Egg className="w-7 h-7 text-slate-700"/> Apontamento Diário</h1>
+            <p className="text-slate-500 mt-1">Lançamento de produção, mortalidade e consumo nutricional.</p>
+        </div>
+
+        {mensagem && (
+          <div className="p-4 rounded-xl font-medium bg-green-50 text-green-700 border border-green-100 shadow-sm flex items-center gap-3">
+            <div className="p-1 bg-green-100 rounded-full"><ClipboardList className="w-4 h-4 text-green-600" /></div>
+            {mensagem}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2"><ClipboardList className="w-5 h-5 text-emerald-600" /> 1. Identificação</h2>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-5 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-slate-400" /> Identificação</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Galpão</label>
-                <select value={galpaoId} onChange={(e) => setGalpaoId(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg bg-slate-50">
-                  {galpoes.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Data da Coleta</label>
-                <input required type="date" value={data} onChange={(e) => setData(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" />
-              </div>
+              <div><label className="block text-sm font-medium text-slate-600 mb-1">Galpão / Lote</label><select value={galpaoId} onChange={(e) => setGalpaoId(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 outline-none focus:border-red-500">{galpoes.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}</select></div>
+              <div><label className="block text-sm font-medium text-slate-600 mb-1">Data da Coleta</label><input required type="date" value={data} onChange={(e) => setData(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2"><Egg className="w-5 h-5 text-yellow-500" /> 2. Produção e Nutrição</h2>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-5 flex items-center gap-2"><Egg className="w-4 h-4 text-orange-400" /> Produção e Nutrição</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div><label className="block text-sm font-medium text-slate-700 mb-1">Ovos (Qtd)</label><input required type="number" value={ovosTotal} onChange={(e) => setOvosTotal(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" placeholder="Ex: 4100" /></div>
-              <div><label className="block text-sm font-medium text-slate-700 mb-1">Peso Médio (g)</label><input required type="number" step="0.1" value={pesoMedio} onChange={(e) => setPesoMedio(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" placeholder="Ex: 62.5" /></div>
-              <div><label className="block text-sm font-medium text-slate-700 mb-1">Ração Fornecida (kg)</label><input required type="number" step="0.1" value={racaoFornecida} onChange={(e) => setRacaoFornecida(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" placeholder="Ex: 520" /></div>
-              <div><label className="block text-sm font-medium text-slate-700 mb-1">Sobra de Ração (kg)</label><input type="number" step="0.1" value={sobraRacao} onChange={(e) => setSobraRacao(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" placeholder="Ex: 5" /></div>
+              <div><label className="block text-sm font-medium text-slate-600 mb-1">Ovos (Qtd)</label><input required type="number" value={ovosTotal} onChange={(e) => setOvosTotal(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+              <div><label className="block text-sm font-medium text-slate-600 mb-1">Peso Médio (g)</label><input required type="number" step="0.1" value={pesoMedio} onChange={(e) => setPesoMedio(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+              <div><label className="block text-sm font-medium text-slate-600 mb-1">Ração (kg)</label><input required type="number" step="0.1" value={racaoFornecida} onChange={(e) => setRacaoFornecida(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+              <div><label className="block text-sm font-medium text-slate-600 mb-1">Sobra (kg)</label><input type="number" step="0.1" value={sobraRacao} onChange={(e) => setSobraRacao(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
             </div>
-            
-            <div className="mt-4 p-4 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center gap-4">
-                <DollarSign className="w-8 h-8 text-emerald-600" />
+            <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-4">
+                <DollarSign className="w-5 h-5 text-slate-400" />
                 <div className="flex-1">
-                    <label className="block text-sm font-bold text-emerald-800 mb-1">Preço da Ração (R$/kg) <span className="text-xs font-normal text-emerald-600">- Opcional para cálculo de custos</span></label>
-                    <input type="number" step="0.01" value={precoRacao} onChange={(e) => setPrecoRacao(e.target.value)} className="w-full md:w-1/3 p-2 border border-emerald-200 rounded-lg focus:ring-emerald-500" placeholder="Ex: 2.15" />
+                    <label className="block text-sm font-semibold text-slate-600 mb-1">Custo da Ração (R$/kg) <span className="font-normal text-slate-400">- Opcional para DRE</span></label>
+                    <input type="number" step="0.01" value={precoRacao} onChange={(e) => setPrecoRacao(e.target.value)} className="w-full md:w-1/3 p-2.5 border border-slate-200 rounded-lg outline-none focus:border-red-500" />
                 </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-             <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2"><Bird className="w-5 h-5 text-red-500" /> 3. Mortalidade Diária</h2>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-5 flex items-center gap-2"><Bird className="w-4 h-4 text-red-400" /> Mortalidade Diária</h2>
              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div><label className="block text-sm font-medium text-slate-700">Prolapso</label><input type="number" min="0" value={mortProlapso} onChange={(e) => setMortProlapso(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" /></div>
-                <div><label className="block text-sm font-medium text-slate-700">Canibalismo</label><input type="number" min="0" value={mortCanibalismo} onChange={(e) => setMortCanibalismo(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" /></div>
-                <div><label className="block text-sm font-medium text-slate-700">Morte Natural</label><input type="number" min="0" value={mortNatural} onChange={(e) => setMortNatural(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" /></div>
-                <div><label className="block text-sm font-medium text-slate-700">Súbita</label><input type="number" min="0" value={mortSubita} onChange={(e) => setMortSubita(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-sm font-medium text-slate-600 mb-1">Prolapso</label><input type="number" min="0" value={mortProlapso} onChange={(e) => setMortProlapso(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+                <div><label className="block text-sm font-medium text-slate-600 mb-1">Canibalismo</label><input type="number" min="0" value={mortCanibalismo} onChange={(e) => setMortCanibalismo(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+                <div><label className="block text-sm font-medium text-slate-600 mb-1">Morte Natural</label><input type="number" min="0" value={mortNatural} onChange={(e) => setMortNatural(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
+                <div><label className="block text-sm font-medium text-slate-600 mb-1">Súbita</label><input type="number" min="0" value={mortSubita} onChange={(e) => setMortSubita(e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl outline-none focus:border-red-500" /></div>
              </div>
           </div>
 
-          <div className="flex justify-end">
-             <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center gap-2">
-                 <ClipboardList className="w-5 h-5" /> Salvar Apontamento
+          <div className="flex justify-end pt-2">
+             <button type="submit" className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-xl shadow-md transition-all flex items-center gap-2">
+                 Salvar Apontamento
              </button>
           </div>
         </form>
@@ -437,94 +678,136 @@ export default function App() {
   };
 
   const RelatoriosView = () => {
-    const [selectedGalpao, setSelectedGalpao] = useState(galpoes.length > 0 ? galpoes[0].id : '');
-    const galpao = galpoes.find(g => g.id === selectedGalpao);
-    
-    const dadosGalpao = coletas
-        .filter(c => c.galpaoId === selectedGalpao)
-        .sort((a,b) => new Date(a.data) - new Date(b.data));
-
-    if (!galpao || dadosGalpao.length === 0) {
-        return (
-            <div className="p-6 max-w-7xl mx-auto space-y-6">
-                <h1 className="text-3xl font-bold text-slate-800 mb-6">Índices Zootécnicos</h1>
-                <select value={selectedGalpao} onChange={(e) => setSelectedGalpao(e.target.value)} className="w-full max-w-md p-2 border border-slate-300 rounded-lg mb-4">
-                    {galpoes.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
-                </select>
-                <div className="p-8 bg-white border border-slate-200 rounded-xl text-center text-slate-500">Nenhum dado zootécnico registrado para este galpão ainda.</div>
-            </div>
-        );
-    }
-
-    const ultimaColeta = dadosGalpao[dadosGalpao.length - 1];
-    const avesVivasHoje = calcularAvesVivasNaData(selectedGalpao, ultimaColeta.data);
-    const avesSeguras = avesVivasHoje > 0 ? avesVivasHoje : 1;
-
-    // Fórmulas Zootécnicas
-    const producaoOvosPorcentagem = (ultimaColeta.ovosTotal / avesSeguras) * 100;
-    const consumoTotalDiarioKg = ultimaColeta.racaoFornecida - (ultimaColeta.sobra || 0);
-    const consumoMedioGramas = (consumoTotalDiarioKg * 1000) / avesSeguras;
-    
-    const pesoTotalOvosKg = (ultimaColeta.ovosTotal * ultimaColeta.pesoMedio) / 1000;
-    const conversaoAlimentarKgKg = pesoTotalOvosKg > 0 ? (consumoTotalDiarioKg / pesoTotalOvosKg) : 0;
-    const conversaoAlimentarDz = ultimaColeta.ovosTotal > 0 ? (consumoTotalDiarioKg / (ultimaColeta.ovosTotal / 12)) : 0;
-
-    // Fórmulas Financeiras
-    const custoRacaoDia = consumoTotalDiarioKg * (ultimaColeta.precoRacao || 0);
-    const duziasProduzidas = ultimaColeta.ovosTotal / 12;
-    const custoAlimentarPorDuzia = duziasProduzidas > 0 ? (custoRacaoDia / duziasProduzidas) : 0;
-
-    const mortalidadeTotalLote = dadosGalpao.reduce((acc, c) => acc + c.mortalidadeTotal, 0);
-    const viabilidade = ((galpao.avesAlojadas - mortalidadeTotalLote) / galpao.avesAlojadas) * 100;
-
-    const handleGerarParecerIA = () => {
-        const systemInstruction = "Você é um Zootecnista sênior, especialista em gestão técnica de granjas de postura. Sua função é avaliar os índices zootécnicos e financeiros do lote atual. Forneça um parecer claro: se está bom, ruim, e dê recomendações construtivas e realistas (manejo, ração, luz, etc). Estruture em tópicos breves para fácil leitura no celular.";
-        const prompt = `Gere um Parecer Zootécnico para o seguinte lote de postura (Data base: ${ultimaColeta.data}):\nLote: ${galpao.nome}\nIdade inicial: ${galpao.idadeSemanas} semanas\nViabilidade: ${viabilidade.toFixed(2)}%\nProdução Atual: ${producaoOvosPorcentagem.toFixed(1)}%\nConsumo Médio: ${consumoMedioGramas.toFixed(1)} g/ave\nConversão Alimentar: ${conversaoAlimentarKgKg.toFixed(3)} kg/kg massa\nCusto Alimentar (se informado): R$ ${custoAlimentarPorDuzia.toFixed(2)} por dúzia. Analise o que significa essa CA e produção. Há indicativo de desperdício? Como otimizar?`;
-        callGeminiIA(prompt, systemInstruction, `Parecer Técnico Zootécnico - ${galpao.nome}`);
-    };
+    const [modalRelatorio, setModalRelatorio] = useState(null);
 
     return (
-      <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-            <h1 className="text-3xl font-bold text-slate-800">Índices e Desempenho</h1>
-            <select value={selectedGalpao} onChange={(e) => setSelectedGalpao(e.target.value)} className="w-full md:w-auto min-w-[250px] p-2 border border-emerald-300 rounded-lg bg-emerald-50 text-emerald-900 font-semibold focus:ring-emerald-500 shadow-sm">
-                {galpoes.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
-            </select>
+      <div className="p-6 max-w-[1400px] mx-auto space-y-8 animate-fade-in pb-20">
+        <div>
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><BarChart4 className="w-7 h-7 text-slate-700"/> Relatórios</h1>
+            <p className="text-slate-500 mt-1">Gere relatórios detalhados da sua granja</p>
         </div>
         
-        <div className="flex justify-between items-center mb-2">
-            <h2 className="text-lg font-bold text-slate-600">Desempenho Atual ({ultimaColeta.data.split('-').reverse().join('/')})</h2>
-            <button 
-                onClick={handleGerarParecerIA}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 text-sm"
-            >
-                <Sparkles className="w-4 h-4" /> Gerar Parecer Zootécnico (IA)
-            </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+                <div className="p-3 bg-orange-50 rounded-xl text-orange-500"><Egg className="w-6 h-6"/></div>
+                <div><p className="text-sm font-medium text-slate-500">Produção Total</p><h3 className="text-2xl font-bold text-slate-800">{metrics.totalOvosProduzidos.toLocaleString('pt-BR')}</h3></div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+                <div className="p-3 bg-green-50 rounded-xl text-green-500"><DollarSign className="w-6 h-6"/></div>
+                <div><p className="text-sm font-medium text-slate-500">Receita Total</p><h3 className="text-2xl font-bold text-slate-800">R$ {(metrics.receitaTotal / 1000).toFixed(1)}k</h3></div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+                <div className="p-3 bg-blue-50 rounded-xl text-blue-500"><Bird className="w-6 h-6"/></div>
+                <div><p className="text-sm font-medium text-slate-500">Total de Aves</p><h3 className="text-2xl font-bold text-slate-800">{metrics.totalAvesVivas.toLocaleString('pt-BR')}</h3></div>
+            </div>
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+                <div className="p-3 bg-purple-50 rounded-xl text-purple-500"><Activity className="w-6 h-6"/></div>
+                <div><p className="text-sm font-medium text-slate-500">Taxa de Postura</p><h3 className="text-2xl font-bold text-slate-800">{metrics.taxaPosturaHoje.toFixed(1)}%</h3></div>
+            </div>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <StatCard title="Viabilidade do Lote" value={`${viabilidade.toFixed(2)}%`} icon={<Activity />} color={viabilidade >= 98 ? "text-emerald-600" : "text-amber-500"} bg="bg-white border border-slate-200" />
-            <StatCard title="Produção" value={`${producaoOvosPorcentagem.toFixed(1)}%`} icon={<Egg />} color="text-yellow-600" bg="bg-white border border-slate-200" />
-            <StatCard title="Consumo Médio" value={`${consumoMedioGramas.toFixed(1)} g/ave`} icon={<Scale />} color="text-blue-600" bg="bg-white border border-slate-200" />
-            
-            <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
-                <p className="text-sm font-medium text-slate-600 mb-1">Conversão Alimentar</p>
-                <div className="flex flex-col">
-                    <span className="text-xl font-bold text-slate-800">{conversaoAlimentarKgKg.toFixed(3)} <span className="text-sm font-normal text-slate-500">kg/kg massa</span></span>
-                    <span className="text-md font-semibold text-slate-600">{conversaoAlimentarDz.toFixed(3)} <span className="text-xs font-normal text-slate-500">kg/dúzia</span></span>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div className="flex items-start gap-4 mb-6">
+                    <div className="p-3 bg-orange-50 text-orange-500 rounded-xl"><Egg className="w-6 h-6"/></div>
+                    <div><h3 className="text-lg font-bold text-slate-800 leading-tight">Relatório de Produção</h3><p className="text-sm text-slate-500 mt-1">Análise detalhada da produção de ovos por período</p></div>
+                </div>
+                <div className="flex gap-3">
+                    <button onClick={() => setModalRelatorio('producao')} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"><FileText className="w-5 h-5" /> Visualizar</button>
+                    <button className="px-4 bg-white border border-red-100 hover:bg-red-50 text-red-600 rounded-xl flex items-center justify-center transition-colors"><Download className="w-5 h-5" /></button>
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div className="flex items-start gap-4 mb-6">
+                    <div className="p-3 bg-green-50 text-green-500 rounded-xl"><DollarSign className="w-6 h-6"/></div>
+                    <div><h3 className="text-lg font-bold text-slate-800 leading-tight">Relatório Financeiro</h3><p className="text-sm text-slate-500 mt-1">Receitas, despesas operacionais e lucro por período</p></div>
+                </div>
+                <div className="flex gap-3">
+                    <button onClick={() => setActiveTab('financeiro')} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"><FileText className="w-5 h-5" /> Visualizar DRE</button>
+                    <button className="px-4 bg-white border border-red-100 hover:bg-red-50 text-red-600 rounded-xl flex items-center justify-center transition-colors"><Download className="w-5 h-5" /></button>
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow">
+                <div className="flex items-start gap-4 mb-6">
+                    <div className="p-3 bg-blue-50 text-blue-500 rounded-xl"><Bird className="w-6 h-6"/></div>
+                    <div><h3 className="text-lg font-bold text-slate-800 leading-tight">Relatório por Lote</h3><p className="text-sm text-slate-500 mt-1">Desempenho zootécnico individual de cada lote</p></div>
+                </div>
+                <div className="flex gap-3">
+                    <button onClick={() => setModalRelatorio('lote')} className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"><FileText className="w-5 h-5" /> Visualizar</button>
+                    <button className="px-4 bg-white border border-red-100 hover:bg-red-50 text-red-600 rounded-xl flex items-center justify-center transition-colors"><Download className="w-5 h-5" /></button>
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-2"><Sparkles className="w-6 h-6 text-indigo-200"/></div>
+                <div className="flex items-start gap-4 mb-6">
+                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Activity className="w-6 h-6"/></div>
+                    <div><h3 className="text-lg font-bold text-slate-800 leading-tight">Relatório de Eficiência (IA)</h3><p className="text-sm text-slate-500 mt-1">Indicadores de produtividade e conversão gerados por IA</p></div>
+                </div>
+                <div className="flex gap-3">
+                    <button onClick={() => setActiveTab('copiloto')} className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"><Bot className="w-5 h-5" /> Consultar Copiloto</button>
                 </div>
             </div>
         </div>
 
-        {ultimaColeta.precoRacao > 0 && (
-            <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-xl shadow-sm mb-8">
-                <h2 className="text-lg font-bold text-emerald-800 mb-4 flex items-center gap-2"><DollarSign className="w-5 h-5" /> Indicadores Financeiros (Custo Alimentar)</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div><p className="text-sm font-medium text-emerald-600">Preço da Ração Informado</p><p className="text-2xl font-bold text-emerald-900">R$ {ultimaColeta.precoRacao.toFixed(2)} <span className="text-sm font-normal">/kg</span></p></div>
-                    <div><p className="text-sm font-medium text-emerald-600">Custo Total em Ração (Dia)</p><p className="text-2xl font-bold text-emerald-900">R$ {custoRacaoDia.toFixed(2)}</p></div>
-                    <div className="bg-white p-4 rounded-lg shadow-inner border border-emerald-100">
-                        <p className="text-sm font-bold text-slate-600">Custo Alimentar p/ Dúzia</p>
-                        <p className="text-3xl font-black text-emerald-600">R$ {custoAlimentarPorDuzia.toFixed(2)}</p>
+        {modalRelatorio === 'producao' && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+                    <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white">
+                        <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2"><Egg className="w-6 h-6 text-orange-500"/> Gráfico de Produção</h3>
+                        <button onClick={() => setModalRelatorio(null)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-lg"><X className="w-6 h-6" /></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+                        <div className="bg-white p-6 rounded-xl border border-slate-100 h-80">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={[...coletas].sort((a,b) => new Date(a.data) - new Date(b.data))}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="data" stroke="#64748b" tickFormatter={(v) => v.split('-').slice(1).join('/')} />
+                                    <YAxis stroke="#64748b" />
+                                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                    <Legend />
+                                    <Line type="monotone" name="Ovos Coletados" dataKey="ovosTotal" stroke="#f97316" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {modalRelatorio === 'lote' && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+                    <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white">
+                        <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2"><Bird className="w-6 h-6 text-blue-500"/> Desempenho por Lote</h3>
+                        <button onClick={() => setModalRelatorio(null)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-lg"><X className="w-6 h-6" /></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+                        {galpoes.map(g => {
+                            const cLote = coletas.filter(c => c.galpaoId === g.id);
+                            const mortTotal = cLote.reduce((acc, c) => acc + c.mortalidadeTotal, 0);
+                            const viab = ((g.avesAlojadas - mortTotal) / g.avesAlojadas) * 100;
+                            return (
+                                <div key={g.id} className="bg-white p-5 rounded-xl border border-slate-200 mb-4 shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-4">
+                                    <div>
+                                        <h4 className="font-bold text-lg text-slate-800">{g.nome}</h4>
+                                        <p className="text-sm text-slate-500">Idade Entrada: {g.idadeSemanas} semanas | Sistema: {g.sistema}</p>
+                                    </div>
+                                    <div className="flex gap-6">
+                                        <div className="text-center">
+                                            <p className="text-xs font-semibold text-slate-400 uppercase">Viabilidade</p>
+                                            <p className="font-bold text-lg text-slate-700">{viab.toFixed(2)}%</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-xs font-semibold text-slate-400 uppercase">Mortalidade</p>
+                                            <p className="font-bold text-lg text-red-500">{mortTotal} aves</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -533,133 +816,134 @@ export default function App() {
     );
   };
 
-  const AssistenteView = () => {
+  const CopilotoView = () => {
     const [pergunta, setPergunta] = useState("");
     const [resposta, setResposta] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const handleAsk = async (e) => {
-      e.preventDefault();
-      if (!pergunta.trim()) return;
+    const handleAsk = async (e, promptPredefinido = null) => {
+      const textToAsk = typeof promptPredefinido === 'string' ? promptPredefinido : pergunta;
+      if (!textToAsk.trim()) return;
+      
       setLoading(true);
       setResposta("");
+      if(e && e.preventDefault) e.preventDefault();
       
       try {
-          const payload = {
-              contents: [{ parts: [{ text: pergunta }] }],
-              systemInstruction: { parts: [{ text: "Você é um especialista em avicultura de postura (Zootecnista/Veterinário). Responda dúvidas de produtores com clareza, dicas práticas de manejo, ambiência e nutrição. Formate em tópicos curtos e diretos focados na solução." }] }
-          };
-          
+          const systemContext = `Você é o Copiloto Avícola PRO, uma IA avançada desenvolvida para o sistema AvesGest PRO. CONTEXTO EM TEMPO REAL: Aves Vivas Totais: ${metrics.totalAvesVivas}, Taxa Postura Hoje: ${metrics.taxaPosturaHoje.toFixed(1)}%, Mortalidade: ${metrics.mortalidadeGeral} aves (${metrics.taxaMortalidadeGlobal.toFixed(2)}%), Lucro Bruto (Mês): R$ ${metrics.lucroBruto.toFixed(2)}. Responda diretamente ao avicultor de forma profissional.`;
+          const payload = { contents: [{ parts: [{ text: textToAsk }] }], systemInstruction: { parts: [{ text: systemContext }] } };
           const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-          const data = await fetchWithBackoff(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-          });
-
+          
+          const data = await fetchWithBackoff(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (generatedText) {
-              setResposta(generatedText);
-          } else {
-              throw new Error("Resposta inválida");
-          }
+          
+          if (generatedText) setResposta(generatedText);
+          else throw new Error("Resposta inválida");
       } catch (error) {
-          setResposta("⚠️ Erro ao contatar a IA. Verifique sua conexão e tente novamente.");
+          setResposta("⚠️ Falha na conexão com o motor neural. Tente novamente.");
       } finally {
           setLoading(false);
       }
     };
 
     return (
-      <div className="p-6 max-w-4xl mx-auto space-y-6 animate-fade-in">
-        <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
-           <Bot className="w-8 h-8 text-indigo-600" />
-           Consultoria Zootécnica IA
-        </h1>
-        <p className="text-slate-600 text-lg">Descreva sintomas das aves, dúvidas sobre formulação de ração, manejo de ambiência ou sanidade. Nosso Assistente Virtual analisará seu caso e fornecerá recomendações precisas ✨.</p>
+      <div className="p-6 max-w-[1000px] mx-auto space-y-6 animate-fade-in pb-20 flex flex-col h-[calc(100vh-5rem)]">
+        <div>
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3"><Bot className="w-7 h-7 text-indigo-600"/> Copiloto IA</h1>
+            <p className="text-slate-500 mt-1">Assistente Preditivo conectado aos dados em tempo real da sua granja.</p>
+        </div>
         
-        <form onSubmit={handleAsk} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-           <label className="block text-sm font-medium text-slate-700 mb-2">Sua Dúvida ou Problema no Lote</label>
-           <textarea 
-             value={pergunta}
-             onChange={(e) => setPergunta(e.target.value)}
-             placeholder="Ex: Minhas aves estão com 45 semanas, a produção caiu 10% nos últimos 3 dias e notei fezes esverdeadas. O que pode ser e como devo proceder com o manejo?"
-             className="w-full p-4 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 min-h-[120px] resize-none"
-           />
-           <div className="flex justify-end mt-4">
-               <button disabled={loading || !pergunta.trim()} type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 transition-colors shadow font-semibold">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+             <button onClick={(e) => { setPergunta("Gere uma análise completa."); handleAsk(e, "Gere uma análise completa e sugira cortes de gastos."); }} className="bg-white border border-slate-100 p-4 rounded-2xl text-left hover:border-indigo-300 hover:shadow-sm transition-all group">
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><BarChart4 className="w-4 h-4 text-indigo-500" /> Análise Geral</h3>
+                 <p className="text-xs text-slate-500">DRE e Taxa de Postura</p>
+             </button>
+             <button onClick={(e) => { setPergunta("Faça uma previsão de lucro."); handleAsk(e, "Baseado nos meus custos, faça uma previsão de lucro para 30 dias."); }} className="bg-white border border-slate-100 p-4 rounded-2xl text-left hover:border-indigo-300 hover:shadow-sm transition-all group">
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><TrendingUp className="w-4 h-4 text-indigo-500" /> Previsão 30 Dias</h3>
+                 <p className="text-xs text-slate-500">Projeção financeira</p>
+             </button>
+             <button onClick={(e) => { setPergunta("Como escoar estoque?"); handleAsk(e, "Tenho um estoque de ovos. Qual a melhor estratégia de venda?"); }} className="bg-white border border-slate-100 p-4 rounded-2xl text-left hover:border-indigo-300 hover:shadow-sm transition-all group">
+                 <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-1"><PackageSearch className="w-4 h-4 text-indigo-500" /> Estoque</h3>
+                 <p className="text-xs text-slate-500">Estratégias de vendas</p>
+             </button>
+        </div>
+        
+        <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+                 {!resposta && !loading && (
+                     <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4">
+                         <Sparkles className="w-12 h-12" />
+                         <p className="text-sm font-medium">Faça uma pergunta para iniciar a consultoria.</p>
+                     </div>
+                 )}
+                 {loading && (
+                     <div className="flex items-center gap-3 text-indigo-600 bg-indigo-50 p-4 rounded-xl border border-indigo-100 w-fit text-sm font-medium">
+                         <Loader2 className="w-4 h-4 animate-spin" /> Analisando os dados da granja...
+                     </div>
+                 )}
+                 {resposta && (
+                     <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm animate-fade-in text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
+                         <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                             <div className="bg-indigo-100 p-1.5 rounded-lg"><Bot className="w-4 h-4 text-indigo-600" /></div>
+                             <h3 className="font-bold text-indigo-900">Parecer Técnico</h3>
+                         </div>
+                         {resposta}
+                     </div>
+                 )}
+            </div>
+            <form onSubmit={handleAsk} className="p-4 bg-white border-t border-slate-100 flex gap-3">
+               <input value={pergunta} onChange={(e) => setPergunta(e.target.value)} placeholder="Faça uma pergunta ao Copiloto..." className="flex-1 p-3 border border-slate-200 rounded-xl focus:border-indigo-500 outline-none text-sm bg-slate-50" />
+               <button disabled={loading || !pergunta.trim()} type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 rounded-xl disabled:opacity-50 transition-all flex items-center justify-center shadow-sm">
                   {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                  {loading ? 'Analisando caso...' : '✨ Perguntar ao Especialista'}
                </button>
-           </div>
-        </form>
-
-        {resposta && (
-           <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl shadow-sm animate-fade-in whitespace-pre-wrap text-slate-800 leading-relaxed text-sm md:text-base">
-              <div className="flex items-center gap-2 mb-4 text-indigo-800 font-bold border-b border-indigo-200 pb-2">
-                  <Sparkles className="w-5 h-5" /> Parecer do Assistente IA
-              </div>
-              {resposta}
-           </div>
-        )}
+            </form>
+        </div>
       </div>
     );
   };
 
-  const StatCard = ({ title, value, icon, color, bg }) => (
-    <div className={`${bg} p-6 rounded-xl shadow-sm flex items-start gap-4 hover:shadow-md transition-shadow`}>
-      <div className={`p-3 rounded-lg bg-slate-50 ${color}`}>{React.cloneElement(icon, { className: 'w-6 h-6' })}</div>
-      <div><p className="text-sm font-medium text-slate-600 mb-1">{title}</p><h3 className="text-2xl font-bold text-slate-800">{value}</h3></div>
-    </div>
-  );
-
   return (
-    <div className="flex bg-slate-50 min-h-screen font-sans relative">
-      <Sidebar />
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-emerald-800 text-white flex items-center px-4 z-10 shadow-md">
-          <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2"><Menu className="w-6 h-6" /></button>
-          <span className="ml-2 font-bold text-lg tracking-wide">AveGest</span>
-      </div>
-      <main className="flex-1 overflow-x-hidden overflow-y-auto pt-16 md:pt-0 relative">
+    <div className="flex flex-col bg-slate-50 min-h-screen font-sans">
+      <TopNav />
+      <main className="flex-1 overflow-x-hidden">
         {activeTab === 'dashboard' && <DashboardView />}
         {activeTab === 'galpoes' && <GalpoesView />}
         {activeTab === 'coleta' && <ColetaDiariaView />}
+        {activeTab === 'financeiro' && <FinanceiroView />}
         {activeTab === 'relatorios' && <RelatoriosView />}
-        {activeTab === 'assistente' && <AssistenteView />}
+        {activeTab === 'copiloto' && <CopilotoView />}
+        {activeTab === 'estoque' && <EstoqueView />}
+        {activeTab === 'equipe' && <EquipeView />}
       </main>
 
-      {/* --- MODAL DA INTELIGÊNCIA ARTIFICIAL --- */}
+      {/* --- MODAL DA IA GLOBAL --- */}
       {aiModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-fade-in">
-                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
-                    <div className="flex items-center gap-3 text-indigo-700">
-                        <Bot className="w-6 h-6" />
-                        <h3 className="font-bold text-lg">{aiContextTitle}</h3>
+                <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+                    <div className="flex items-center gap-3 text-indigo-700 font-bold text-lg">
+                        <Bot className="w-5 h-5" /> {aiContextTitle}
                     </div>
-                    <button onClick={() => setAiModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1"><X className="w-6 h-6" /></button>
+                    <button onClick={() => setAiModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 bg-slate-50 rounded-lg"><X className="w-5 h-5" /></button>
                 </div>
-                <div className="p-6 overflow-y-auto flex-1 bg-white text-slate-700 leading-relaxed text-sm md:text-base">
+                <div className="p-6 overflow-y-auto flex-1 bg-slate-50 text-slate-700 text-sm leading-relaxed">
                     {aiLoading ? (
                         <div className="flex flex-col items-center justify-center py-12 text-indigo-600">
-                            <Loader2 className="w-10 h-10 animate-spin mb-4" />
-                            <p className="font-medium animate-pulse">O Zootecnista Virtual está analisando os dados...</p>
-                            <p className="text-xs text-slate-400 mt-2">Consultando modelos zootécnicos avançados</p>
+                            <Loader2 className="w-8 h-8 animate-spin mb-4" />
+                            <p className="font-medium animate-pulse">A IA está avaliando seus dados...</p>
                         </div>
                     ) : (
-                        <div className="whitespace-pre-wrap">
-                            <div className="flex items-start gap-3 p-4 mb-4 bg-blue-50 text-blue-800 rounded-lg border border-blue-100">
-                                <Info className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                                <p className="text-xs leading-tight">Este parecer foi gerado por Inteligência Artificial (Gemini) e não substitui uma visita técnica presencial. Recomenda-se acompanhamento veterinário local para diagnósticos clínicos.</p>
+                        <div className="whitespace-pre-wrap bg-white p-5 rounded-xl border border-slate-200">
+                            <div className="flex items-start gap-3 p-3 mb-4 bg-indigo-50 text-indigo-800 rounded-lg border border-indigo-100">
+                                <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                <p className="text-xs">Parecer gerado por IA (Gemini). Recomendamos acompanhamento veterinário presencial para patologias.</p>
                             </div>
                             {aiResponse}
                         </div>
                     )}
                 </div>
-                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-                    <button onClick={() => setAiModalOpen(false)} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow transition-colors">
-                        Fechar Laudo
-                    </button>
+                <div className="p-4 bg-white border-t border-slate-100 flex justify-end">
+                    <button onClick={() => setAiModalOpen(false)} className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors">Fechar</button>
                 </div>
             </div>
         </div>
