@@ -1,914 +1,669 @@
-import React, { useState, useEffect } from 'react'
-import { Home, Users, Egg, TrendingUp, DollarSign, Settings, Plus, X, Edit2, Trash2, AlertTriangle, BarChart3, Warehouse } from 'lucide-react'
+import React, { useState, useMemo } from 'react';
+import { 
+  LayoutDashboard, Home, ClipboardList, TrendingUp, PlusCircle, 
+  Menu, X, Egg, Bird, Scale, AlertTriangle, Activity, DollarSign, Bell,
+  Sparkles, Bot, Loader2, Info, MessageSquare, Send
+} from 'lucide-react';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+} from 'recharts';
 
-function App() {
-  // ========== ESTADOS PRINCIPAIS ==========
-  const [currentView, setCurrentView] = useState('dashboard')
-  const [lotes, setLotes] = useState([])
-  const [galpoes, setGalpoes] = useState([])
-  const [producao, setProducao] = useState([])
-  const [financeiro, setFinanceiro] = useState([])
-  const [showModal, setShowModal] = useState(false)
-  const [modalType, setModalType] = useState('')
-  const [editingItem, setEditingItem] = useState(null)
-  const [formData, setFormData] = useState({})
+// --- CONFIGURAÇÃO DA API GEMINI ---
+const apiKey = ""; // A chave da API é injetada automaticamente no ambiente
+const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 
-  // ========== CARREGAMENTO DO LOCALSTORAGE ==========
-  useEffect(() => {
-    const savedLotes = localStorage.getItem('avesgest_lotes')
-    const savedGalpoes = localStorage.getItem('avesgest_galpoes')
-    const savedProducao = localStorage.getItem('avesgest_producao')
-    const savedFinanceiro = localStorage.getItem('avesgest_financeiro')
-    
-    if (savedLotes) setLotes(JSON.parse(savedLotes))
-    if (savedGalpoes) setGalpoes(JSON.parse(savedGalpoes))
-    if (savedProducao) setProducao(JSON.parse(savedProducao))
-    if (savedFinanceiro) setFinanceiro(JSON.parse(savedFinanceiro))
-  }, [])
+// --- MOCK DATA INICIAL ---
+const mockGalpoes = [
+  { id: 'g1', nome: 'Galpão 01 - Isa Brown', dataEntrada: '2026-05-01', avesAlojadas: 4500, idadeSemanas: 21, sistema: 'CAGE_FREE', areaUtil: 645 },
+  { id: 'g2', nome: 'Galpão 02 - Lohmann', dataEntrada: '2026-05-15', avesAlojadas: 5000, idadeSemanas: 18, sistema: 'GAIOLA', areaUtil: null }
+];
 
-  // ========== SALVAMENTO NO LOCALSTORAGE ==========
-  useEffect(() => { localStorage.setItem('avesgest_lotes', JSON.stringify(lotes)) }, [lotes])
-  useEffect(() => { localStorage.setItem('avesgest_galpoes', JSON.stringify(galpoes)) }, [galpoes])
-  useEffect(() => { localStorage.setItem('avesgest_producao', JSON.stringify(producao)) }, [producao])
-  useEffect(() => { localStorage.setItem('avesgest_financeiro', JSON.stringify(financeiro)) }, [financeiro])
+const mockColetas = [
+  { id: 'c1', galpaoId: 'g1', data: '2026-05-20', mortalidadeTotal: 2, ovosTotal: 3800, pesoMedio: 60, racaoFornecida: 500, sobra: 5, precoRacao: 2.10 },
+  { id: 'c2', galpaoId: 'g1', data: '2026-05-21', mortalidadeTotal: 1, ovosTotal: 3950, pesoMedio: 61, racaoFornecida: 510, sobra: 2, precoRacao: 2.10 },
+  { id: 'c3', galpaoId: 'g1', data: '2026-05-22', mortalidadeTotal: 0, ovosTotal: 4100, pesoMedio: 62, racaoFornecida: 520, sobra: 4, precoRacao: 2.15 },
+  { id: 'c4', galpaoId: 'g1', data: '2026-05-23', mortalidadeTotal: 8, ovosTotal: 3900, pesoMedio: 62, racaoFornecida: 520, sobra: 10, precoRacao: 2.15 }, // Simulação de problema
+  { id: 'c5', galpaoId: 'g1', data: '2026-05-24', mortalidadeTotal: 1, ovosTotal: 4150, pesoMedio: 63, racaoFornecida: 530, sobra: 5, precoRacao: 2.15 }
+];
 
-  // ========== FUNÇÕES DE MODAL ==========
-  const openModal = (type, item = null) => {
-    setModalType(type)
-    setEditingItem(item)
-    
-    if (item) {
-      setFormData(item)
-    } else {
-      if (type === 'lote') {
-        setFormData({ lote: '', raca: '', quantidade: '', data: '', galpaoId: '' })
-      } else if (type === 'galpao') {
-        setFormData({ nome: '', tipo: 'Cage Free', capacidade: '' })
-      } else if (type === 'producao') {
-        setFormData({ data: '', loteId: '', ovos: '', trincados: '', mortalidade: '', custoRacao: '' })
-      } else if (type === 'financeiro') {
-        setFormData({ data: '', descricao: '', tipo: 'receita', valor: '' })
-      }
-    }
-    setShowModal(true)
-  }
+export default function App() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  const [galpoes, setGalpoes] = useState(mockGalpoes);
+  const [coletas, setColetas] = useState(mockColetas);
 
-  const closeModal = () => {
-    setShowModal(false)
-    setModalType('')
-    setEditingItem(null)
-    setFormData({})
-  }
+  // Estados globais para a IA
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResponse, setAiResponse] = useState("");
+  const [aiContextTitle, setAiContextTitle] = useState("");
 
-  // ========== FUNÇÕES DE CRUD ==========
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    
-    if (modalType === 'lote') {
-      if (editingItem) {
-        setLotes(lotes.map(l => l.id === editingItem.id ? { ...formData, id: editingItem.id } : l))
-      } else {
-        setLotes([...lotes, { ...formData, id: Date.now() }])
-      }
-    } else if (modalType === 'galpao') {
-      if (editingItem) {
-        setGalpoes(galpoes.map(g => g.id === editingItem.id ? { ...formData, id: editingItem.id } : g))
-      } else {
-        setGalpoes([...galpoes, { ...formData, id: Date.now() }])
-      }
-    } else if (modalType === 'producao') {
-      if (editingItem) {
-        setProducao(producao.map(p => p.id === editingItem.id ? { ...formData, id: editingItem.id } : p))
-      } else {
-        setProducao([...producao, { ...formData, id: Date.now() }])
-      }
-    } else if (modalType === 'financeiro') {
-      if (editingItem) {
-        setFinanceiro(financeiro.map(f => f.id === editingItem.id ? { ...formData, id: editingItem.id } : f))
-      } else {
-        setFinanceiro([...financeiro, { ...formData, id: Date.now() }])
-      }
-    }
-    
-    closeModal()
-  }
-
-  const handleDelete = (type, id) => {
-    if (!confirm('Tem certeza que deseja excluir?')) return
-    
-    if (type === 'lote') setLotes(lotes.filter(l => l.id !== id))
-    else if (type === 'galpao') setGalpoes(galpoes.filter(g => g.id !== id))
-    else if (type === 'producao') setProducao(producao.filter(p => p.id !== id))
-    else if (type === 'financeiro') setFinanceiro(financeiro.filter(f => f.id !== id))
-  }
-
-  // ========== CÁLCULOS E ESTATÍSTICAS ==========
-  const calcularEstatisticas = () => {
-    const hoje = new Date().toISOString().split('T')[0]
-    const producaoHoje = producao.filter(p => p.data === hoje)
-    const totalOvosHoje = producaoHoje.reduce((acc, p) => acc + Number(p.ovos || 0), 0)
-    const totalAves = lotes.reduce((acc, l) => acc + Number(l.quantidade || 0), 0)
-    
-    const mesAtual = new Date().getMonth()
-    const anoAtual = new Date().getFullYear()
-    const financeiroMes = financeiro.filter(f => {
-      const dataF = new Date(f.data)
-      return dataF.getMonth() === mesAtual && dataF.getFullYear() === anoAtual
-    })
-    
-    const receitasMes = financeiroMes.filter(f => f.tipo === 'receita').reduce((acc, f) => acc + Number(f.valor || 0), 0)
-    const despesasMes = financeiroMes.filter(f => f.tipo === 'despesa').reduce((acc, f) => acc + Number(f.valor || 0), 0)
-    const saldoMes = receitasMes - despesasMes
-    
-    return { totalAves, totalOvosHoje, receitasMes, saldoMes }
-  }
-
-  const gerarAlertas = () => {
-    const alertas = []
-    const hoje = new Date().toISOString().split('T')[0]
-    
-    // Verificar produção abaixo de 85%
-    lotes.forEach(lote => {
-      const producaoLote = producao.filter(p => p.loteId === lote.id && p.data === hoje)
-      if (producaoLote.length > 0) {
-        const totalOvos = producaoLote.reduce((acc, p) => acc + Number(p.ovos || 0), 0)
-        const taxaProducao = (totalOvos / Number(lote.quantidade)) * 100
-        
-        if (taxaProducao < 85) {
-          alertas.push({
-            tipo: 'warning',
-            mensagem: `Lote ${lote.lote}: Produção abaixo de 85% (${taxaProducao.toFixed(1)}%)`
-          })
+  // --- FUNÇÕES UTILITÁRIAS DE API ---
+  const fetchWithBackoff = async (url, options, retries = 5, delay = 1000) => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, options);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            if (i === retries - 1) throw error;
+            await new Promise(res => setTimeout(res, delay));
+            delay *= 2; // Exponential backoff
         }
-      }
-    })
+    }
+  };
+
+  const callGeminiIA = async (promptText, systemInstruction, title) => {
+    setAiContextTitle(title);
+    setAiResponse("");
+    setAiLoading(true);
+    setAiModalOpen(true);
     
-    // Verificar mortalidade acima de 0.15%
-    galpoes.forEach(galpao => {
-      const producaoGalpao = producao.filter(p => {
-        const lote = lotes.find(l => l.id === p.loteId)
-        return lote && lote.galpaoId === galpao.id && p.data === hoje
-      })
-      
-      producaoGalpao.forEach(p => {
-        const taxaMortalidade = Number(p.mortalidade || 0)
-        if (taxaMortalidade > 0.15) {
-          alertas.push({
-            tipo: 'danger',
-            mensagem: `Galpão ${galpao.nome}: Mortalidade crítica (${taxaMortalidade}%)`
-          })
+    try {
+        const payload = {
+            contents: [{ parts: [{ text: promptText }] }],
+            systemInstruction: { parts: [{ text: systemInstruction }] }
+        };
+        
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+        const data = await fetchWithBackoff(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (generatedText) {
+            setAiResponse(generatedText);
+        } else {
+            throw new Error("Resposta inválida da API");
         }
-      })
-    })
-    
-    return alertas
-  }
+    } catch (error) {
+        setAiResponse("⚠️ Ocorreu um erro ao consultar o Zootecnista IA. Por favor, tente novamente mais tarde.");
+    } finally {
+        setAiLoading(false);
+    }
+  };
 
-  const calcularCustoPorDuzia = () => {
-    const producaoComCusto = producao.filter(p => p.custoRacao && p.ovos)
-    if (producaoComCusto.length === 0) return null
-    
-    const custoTotal = producaoComCusto.reduce((acc, p) => acc + Number(p.custoRacao || 0), 0)
-    const ovosTotal = producaoComCusto.reduce((acc, p) => acc + Number(p.ovos || 0), 0)
-    const duzias = ovosTotal / 12
-    
-    return duzias > 0 ? (custoTotal / duzias).toFixed(2) : 0
-  }
+  // --- MOTOR DE CÁLCULO ZOOTÉCNICO ---
+  const calcularAvesVivasNaData = (galpaoId, dataReferencia) => {
+    const galpao = galpoes.find(g => g.id === galpaoId);
+    if (!galpao) return 0;
+    const mortalidadeAcumulada = coletas
+      .filter(c => c.galpaoId === galpaoId && new Date(c.data) <= new Date(dataReferencia))
+      .reduce((acc, c) => acc + c.mortalidadeTotal, 0);
+    return galpao.avesAlojadas - mortalidadeAcumulada;
+  };
 
-  const prepararDadosGrafico = () => {
-    const ultimos30Dias = producao.slice(-30).map(p => ({
-      data: p.data,
-      ovos: Number(p.ovos || 0),
-      mortalidade: Number(p.mortalidade || 0)
-    }))
-    return ultimos30Dias
-  }
+  const Sidebar = () => (
+    <div className={`bg-emerald-800 text-white w-64 min-h-screen flex flex-col transition-transform transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed z-20 md:relative`}>
+      <div className="p-6 flex items-center justify-between border-b border-emerald-700">
+        <div className="flex items-center gap-2">
+          <Egg className="w-8 h-8 text-yellow-400" />
+          <span className="text-2xl font-bold tracking-wider">AveGest</span>
+        </div>
+        <button className="md:hidden text-white" onClick={() => setIsMobileMenuOpen(false)}><X /></button>
+      </div>
+      <nav className="flex-1 px-4 mt-6 space-y-2">
+        <NavItem id="dashboard" icon={<LayoutDashboard />} label="Dashboard" />
+        <NavItem id="galpoes" icon={<Home />} label="Lotes e Galpões" />
+        <NavItem id="coleta" icon={<ClipboardList />} label="Apontamento Diário" />
+        <NavItem id="relatorios" icon={<TrendingUp />} label="Relatórios (Índices)" />
+        <NavItem id="assistente" icon={<MessageSquare />} label="Consultoria IA ✨" />
+      </nav>
+      
+      <div className="p-4 border-t border-emerald-700 m-4 rounded-lg bg-emerald-900/50">
+          <div className="flex items-center gap-2 text-emerald-200 text-xs mb-2">
+              <Sparkles className="w-4 h-4 text-yellow-400" />
+              <span>Zootecnia de Precisão</span>
+          </div>
+          <p className="text-[10px] text-emerald-400 leading-tight">Módulos potencializados com IA Gemini para laudos técnicos rápidos.</p>
+      </div>
+    </div>
+  );
 
-  const stats = calcularEstatisticas()
-  const alertas = gerarAlertas()
-  const custoPorDuzia = calcularCustoPorDuzia()
-  const dadosGrafico = prepararDadosGrafico()
-
-  // ========== RENDERIZAÇÃO DOS COMPONENTES ==========
-  
-  // Dashboard com Gráficos e Alertas
-  const renderDashboard = () => (
-    <div>
-      <h2 className="text-3xl font-bold mb-6 text-white flex items-center">
-        <Home className="mr-3" /> Dashboard
-      </h2>
-      
-      {/* Alertas */}
-      {alertas.length > 0 && (
-        <div className="mb-6">
-          <h3 className="text-xl font-bold text-white mb-3 flex items-center">
-            <AlertTriangle className="mr-2" /> Alertas do Sistema
-          </h3>
-          {alertas.map((alerta, idx) => (
-            <div 
-              key={idx} 
-              className={`p-4 mb-3 rounded-lg border-l-4 ${
-                alerta.tipo === 'warning' 
-                  ? 'bg-yellow-900/30 border-yellow-500 text-yellow-200' 
-                  : 'bg-red-900/30 border-red-500 text-red-200'
-              }`}
-            >
-              <AlertTriangle className="inline mr-2" size={20} />
-              {alerta.mensagem}
-            </div>
-          ))}
-        </div>
-      )}
-      
-      {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="stats-card">
-          <Users className="text-blue-400 mb-2" size={32} />
-          <p className="text-slate-400 text-sm">Total de Aves</p>
-          <p className="text-3xl font-bold text-white">{stats.totalAves}</p>
-        </div>
-        
-        <div className="stats-card">
-          <Egg className="text-yellow-400 mb-2" size={32} />
-          <p className="text-slate-400 text-sm">Produção Hoje</p>
-          <p className="text-3xl font-bold text-white">{stats.totalOvosHoje}</p>
-        </div>
-        
-        <div className="stats-card">
-          <DollarSign className="text-green-400 mb-2" size={32} />
-          <p className="text-slate-400 text-sm">Receitas (Mês)</p>
-          <p className="text-3xl font-bold text-white">R$ {stats.receitasMes.toFixed(2)}</p>
-        </div>
-        
-        <div className="stats-card">
-          <TrendingUp className="text-purple-400 mb-2" size={32} />
-          <p className="text-slate-400 text-sm">Saldo (Mês)</p>
-          <p className={`text-3xl font-bold ${stats.saldoMes >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            R$ {stats.saldoMes.toFixed(2)}
-          </p>
-        </div>
-      </div>
-      
-      {/* Gráfico de Produção e Mortalidade */}
-      <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50 mb-6">
-        <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-          <BarChart3 className="mr-2" /> Produção de Ovos e Mortalidade (30 dias)
-        </h3>
-        <div className="h-64 flex items-end justify-between gap-2">
-          {dadosGrafico.map((dia, idx) => (
-            <div key={idx} className="flex-1 flex flex-col items-center">
-              <div className="w-full bg-yellow-500/30 hover:bg-yellow-500/50 transition-all" 
-                   style={{ height: `${(dia.ovos / Math.max(...dadosGrafico.map(d => d.ovos))) * 200}px` }}
-                   title={`Ovos: ${dia.ovos}`}>
-              </div>
-              <div className="w-full bg-red-500/30 hover:bg-red-500/50 transition-all mt-1" 
-                   style={{ height: `${dia.mortalidade * 10}px` }}
-                   title={`Mortalidade: ${dia.mortalidade}%`}>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-center gap-6 mt-4">
-          <div className="flex items-center">
-            <div className="w-4 h-4 bg-yellow-500 mr-2"></div>
-            <span className="text-slate-400 text-sm">Produção de Ovos</span>
-          </div>
-          <div className="flex items-center">
-            <div className="w-4 h-4 bg-red-500 mr-2"></div>
-            <span className="text-slate-400 text-sm">Mortalidade</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-  
-  // Galpões
-  const renderGalpoes = () => (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-white flex items-center">
-          <Warehouse className="mr-3" /> Galpões
-        </h2>
-        <button onClick={() => openModal('galpao')} className="btn-primary">
-          <Plus size={20} className="mr-2" /> Novo Galpão
-        </button>
-      </div>
-      
-      {galpoes.length === 0 ? (
-        <p className="text-slate-400 text-center py-8">Nenhum galpão cadastrado</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700/50">
-                <th className="text-left text-slate-300 py-3">Nome</th>
-                <th className="text-left text-slate-300 py-3">Tipo</th>
-                <th className="text-left text-slate-300 py-3">Capacidade</th>
-                <th className="text-left text-slate-300 py-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {galpoes.map(galpao => (
-                <tr key={galpao.id} className="border-b border-slate-700/50 hover:bg-slate-800/50">
-                  <td className="py-3 text-white">{galpao.nome}</td>
-                  <td className="py-3 text-white">
-                    <span className={`px-3 py-1 rounded-full text-sm ${
-                      galpao.tipo === 'Cage Free' ? 'bg-green-900/30 text-green-300' : 'bg-blue-900/30 text-blue-300'
-                    }`}>
-                      {galpao.tipo}
-                    </span>
-                  </td>
-                  <td className="py-3 text-white">{galpao.capacidade} aves</td>
-                  <td className="py-3">
-                    <div className="flex gap-2">
-                      <button onClick={() => openModal('galpao', galpao)} className="text-blue-400 hover:text-blue-300">
-                        <Edit2 size={18} />
-                      </button>
-                      <button onClick={() => handleDelete('galpao', galpao.id)} className="text-red-400 hover:text-red-300">
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  )
-  
-  // Lotes de Aves
-  const renderLotes = () => (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-white flex items-center">
-          <Users className="mr-3" /> Lotes de Aves
-        </h2>
-        <button onClick={() => openModal('lote')} className="btn-primary">
-          <Plus size={20} className="mr-2" /> Novo Lote
-        </button>
-      </div>
-      
-      {lotes.length === 0 ? (
-        <p className="text-slate-400 text-center py-8">Nenhum lote cadastrado</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700/50">
-                <th className="text-left text-slate-300 py-3">Lote</th>
-                <th className="text-left text-slate-300 py-3">Raça</th>
-                <th className="text-left text-slate-300 py-3">Quantidade</th>
-                <th className="text-left text-slate-300 py-3">Data</th>
-                <th className="text-left text-slate-300 py-3">Galpão</th>
-                <th className="text-left text-slate-300 py-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lotes.map(lote => {
-                const galpao = galpoes.find(g => g.id === lote.galpaoId)
-                return (
-                  <tr key={lote.id} className="border-b border-slate-700/50 hover:bg-slate-800/50">
-                    <td className="py-3 text-white">{lote.lote}</td>
-                    <td className="py-3 text-white">{lote.raca}</td>
-                    <td className="py-3 text-white">{lote.quantidade}</td>
-                    <td className="py-3 text-white">
-                      {lote.data && !isNaN(new Date(lote.data)) ? new Date(lote.data).toLocaleDateString('pt-BR') : lote.data || 'Sem data'}
-                    </td>
-                    <td className="py-3 text-white">{galpao?.nome || 'N/A'}</td>
-                    <td className="py-3">
-                      <div className="flex gap-2">
-                        <button onClick={() => openModal('lote', lote)} className="text-blue-400 hover:text-blue-300">
-                          <Edit2 size={18} />
-                        </button>
-                        <button onClick={() => handleDelete('lote', lote.id)} className="text-red-400 hover:text-red-300">
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  )
-  
-  // Produção de Ovos
-  const renderProducao = () => (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-white flex items-center">
-          <Egg className="mr-3" /> Produção de Ovos
-        </h2>
-        <button onClick={() => openModal('producao')} className="btn-primary">
-          <Plus size={20} className="mr-2" /> Nova Produção
-        </button>
-      </div>
-      
-      {producao.length === 0 ? (
-        <p className="text-slate-400 text-center py-8">Nenhuma produção registrada</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700/50">
-                <th className="text-left text-slate-300 py-3">Data</th>
-                <th className="text-left text-slate-300 py-3">Lote</th>
-                <th className="text-left text-slate-300 py-3">Ovos Produzidos</th>
-                <th className="text-left text-slate-300 py-3">Trincados</th>
-                <th className="text-left text-slate-300 py-3">Mortalidade (%)</th>
-                <th className="text-left text-slate-300 py-3">Custo Ração</th>
-                <th className="text-left text-slate-300 py-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {producao.map(p => {
-                const lote = lotes.find(l => l.id === p.loteId)
-                return (
-                  <tr key={p.id} className="border-b border-slate-700/50 hover:bg-slate-800/50">
-                    <td className="py-3 text-white">
-                      {p.data && !isNaN(new Date(p.data)) ? new Date(p.data).toLocaleDateString('pt-BR') : p.data || 'Sem data'}
-                    </td>
-                    <td className="py-3 text-white">{lote?.lote || 'N/A'}</td>
-                    <td className="py-3 text-white">{p.ovos}</td>
-                    <td className="py-3 text-white">{p.trincados || 0}</td>
-                    <td className="py-3 text-white">{p.mortalidade || 0}%</td>
-                    <td className="py-3 text-white">{p.custoRacao ? `R$ ${Number(p.custoRacao).toFixed(2)}` : '-'}</td>
-                    <td className="py-3">
-                      <div className="flex gap-2">
-                        <button onClick={() => openModal('producao', p)} className="text-blue-400 hover:text-blue-300">
-                          <Edit2 size={18} />
-                        </button>
-                        <button onClick={() => handleDelete('producao', p.id)} className="text-red-400 hover:text-red-300">
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  )
-  
-  // Financeiro
-  const renderFinanceiro = () => (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-white flex items-center">
-          <DollarSign className="mr-3" /> Financeiro
-        </h2>
-        <button onClick={() => openModal('financeiro')} className="btn-primary">
-          <Plus size={20} className="mr-2" /> Nova Transação
-        </button>
-      </div>
-      
-      {financeiro.length === 0 ? (
-        <p className="text-slate-400 text-center py-8">Nenhuma transação registrada</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700/50">
-                <th className="text-left text-slate-300 py-3">Data</th>
-                <th className="text-left text-slate-300 py-3">Descrição</th>
-                <th className="text-left text-slate-300 py-3">Tipo</th>
-                <th className="text-left text-slate-300 py-3">Valor</th>
-                <th className="text-left text-slate-300 py-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {financeiro.map(f => (
-                <tr key={f.id} className="border-b border-slate-700/50 hover:bg-slate-800/50">
-                  <td className="py-3 text-white">
-                    {f.data && !isNaN(new Date(f.data)) ? new Date(f.data).toLocaleDateString('pt-BR') : f.data || 'Sem data'}
-                  </td>
-                  <td className="py-3 text-white">{f.descricao}</td>
-                  <td className="py-3">
-                    <span className={`px-3 py-1 rounded-full text-sm ${
-                      f.tipo === 'receita' ? 'bg-green-900/30 text-green-300' : 'bg-red-900/30 text-red-300'
-                    }`}>
-                      {f.tipo === 'receita' ? 'Receita' : 'Despesa'}
-                    </span>
-                  </td>
-                  <td className={`py-3 font-bold ${f.tipo === 'receita' ? 'text-green-400' : 'text-red-400'}`}>
-                    R$ {Number(f.valor).toFixed(2)}
-                  </td>
-                  <td className="py-3">
-                    <div className="flex gap-2">
-                      <button onClick={() => openModal('financeiro', f)} className="text-blue-400 hover:text-blue-300">
-                        <Edit2 size={18} />
-                      </button>
-                      <button onClick={() => handleDelete('financeiro', f.id)} className="text-red-400 hover:text-red-300">
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  )
-  
-  // Relatórios com Módulo Financeiro
-  const renderRelatorios = () => (
-    <div>
-      <h2 className="text-3xl font-bold mb-6 text-white flex items-center">
-        <TrendingUp className="mr-3" /> Relatórios
-      </h2>
-      
-      {/* Painel Financeiro de Custo por Dúzia */}
-      {custoPorDuzia && (
-        <div className="bg-gradient-to-r from-green-900/30 to-blue-900/30 p-6 rounded-xl border border-green-700/50 mb-6">
-          <h3 className="text-2xl font-bold text-white mb-4 flex items-center">
-            <DollarSign className="mr-2" /> Análise Financeira - Custo Alimentar
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-slate-800/50 p-4 rounded-lg">
-              <p className="text-slate-400 text-sm mb-2">Custo Alimentar por Dúzia</p>
-              <p className="text-3xl font-bold text-green-400">R$ {custoPorDuzia}</p>
-            </div>
-            <div className="bg-slate-800/50 p-4 rounded-lg">
-              <p className="text-slate-400 text-sm mb-2">Total de Dúzias Produzidas</p>
-              <p className="text-3xl font-bold text-white">
-                {(producao.reduce((acc, p) => acc + Number(p.ovos || 0), 0) / 12).toFixed(0)}
-              </p>
-            </div>
-            <div className="bg-slate-800/50 p-4 rounded-lg">
-              <p className="text-slate-400 text-sm mb-2">Custo Total de Ração</p>
-              <p className="text-3xl font-bold text-white">
-                R$ {producao.reduce((acc, p) => acc + Number(p.custoRacao || 0), 0).toFixed(2)}
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 p-4 bg-blue-900/20 rounded-lg">
-            <p className="text-blue-300 text-sm">
-              💡 <strong>Dica:</strong> Este cálculo considera apenas registros de produção que contêm o custo de ração informado.
-              Para melhorar a precisão, registre o custo de ração em todas as coletas diárias.
-            </p>
-          </div>
-        </div>
-      )}
-      
-      {/* Resumo Geral */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50">
-          <h3 className="text-xl font-bold text-white mb-4">Produção Total</h3>
-          <p className="text-4xl font-bold text-yellow-400">
-            {producao.reduce((acc, p) => acc + Number(p.ovos || 0), 0)} ovos
-          </p>
-          <p className="text-slate-400 mt-2">Ovos trincados: {producao.reduce((acc, p) => acc + Number(p.trincados || 0), 0)}</p>
-        </div>
-        
-        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50">
-          <h3 className="text-xl font-bold text-white mb-4">Saldo Financeiro</h3>
-          <p className={`text-4xl font-bold ${stats.saldoMes >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            R$ {stats.saldoMes.toFixed(2)}
-          </p>
-          <p className="text-slate-400 mt-2">Receitas: R$ {stats.receitasMes.toFixed(2)}</p>
-        </div>
-      </div>
-    </div>
-  )
-  
-  // ========== MODAL COMPONENT ==========
-  const renderModal = () => {
-    if (!showModal) return null
-    
+  const NavItem = ({ id, icon, label }) => {
+    const isActive = activeTab === id;
     return (
-      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div className="bg-slate-900 p-6 rounded-xl border border-slate-700/50 max-w-md w-full max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-2xl font-bold text-white">
-              {editingItem ? 'Editar' : 'Novo'} {modalType === 'lote' ? 'Lote' : modalType === 'galpao' ? 'Galpão' : modalType === 'producao' ? 'Produção' : 'Transação'}
-            </h3>
-            <button onClick={closeModal} className="text-slate-400 hover:text-white">
-              <X size={24} />
-            </button>
-          </div>
-          
-          <form onSubmit={handleSubmit}>
-            {modalType === 'galpao' && (
-              <>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Nome do Galpão</label>
-                  <input
-                    type="text"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.nome || ''}
-                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Tipo</label>
-                  <select
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.tipo || 'Cage Free'}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                  >
-                    <option value="Cage Free">Cage Free</option>
-                    <option value="Gaiola">Gaiola</option>
-                  </select>
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Capacidade (aves)</label>
-                  <input
-                    type="number"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.capacidade || ''}
-                    onChange={(e) => setFormData({ ...formData, capacidade: e.target.value })}
-                    required
-                  />
-                </div>
-              </>
-            )}
-            
-            {modalType === 'lote' && (
-              <>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Lote</label>
-                  <input
-                    type="text"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.lote || ''}
-                    onChange={(e) => setFormData({ ...formData, lote: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Raça</label>
-                  <input
-                    type="text"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.raca || ''}
-                    onChange={(e) => setFormData({ ...formData, raca: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Quantidade</label>
-                  <input
-                    type="number"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.quantidade || ''}
-                    onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Data de Alojamento</label>
-                  <input
-                    type="date"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.data || ''}
-                    onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Galpão</label>
-                  <select
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.galpaoId || ''}
-                    onChange={(e) => setFormData({ ...formData, galpaoId: e.target.value })}
-                    required
-                  >
-                    <option value="">Selecione um galpão</option>
-                    {galpoes.map(g => (
-                      <option key={g.id} value={g.id}>{g.nome}</option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
-            
-            {modalType === 'producao' && (
-              <>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Data</label>
-                  <input
-                    type="date"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.data || ''}
-                    onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Lote</label>
-                  <select
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.loteId || ''}
-                    onChange={(e) => setFormData({ ...formData, loteId: e.target.value })}
-                    required
-                  >
-                    <option value="">Selecione um lote</option>
-                    {lotes.map(l => (
-                      <option key={l.id} value={l.id}>{l.lote}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Ovos Produzidos</label>
-                  <input
-                    type="number"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.ovos || ''}
-                    onChange={(e) => setFormData({ ...formData, ovos: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Ovos Trincados</label>
-                  <input
-                    type="number"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.trincados || ''}
-                    onChange={(e) => setFormData({ ...formData, trincados: e.target.value })}
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Mortalidade (%)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.mortalidade || ''}
-                    onChange={(e) => setFormData({ ...formData, mortalidade: e.target.value })}
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Custo da Ração (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.custoRacao || ''}
-                    onChange={(e) => setFormData({ ...formData, custoRacao: e.target.value })}
-                    placeholder="Opcional - para análise financeira"
-                  />
-                </div>
-              </>
-            )}
-            
-            {modalType === 'financeiro' && (
-              <>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Data</label>
-                  <input
-                    type="date"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.data || ''}
-                    onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Descrição</label>
-                  <input
-                    type="text"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.descricao || ''}
-                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Tipo</label>
-                  <select
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.tipo || 'receita'}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                  >
-                    <option value="receita">Receita</option>
-                    <option value="despesa">Despesa</option>
-                  </select>
-                </div>
-                <div className="mb-4">
-                  <label className="block text-slate-300 mb-2">Valor (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-2"
-                    value={formData.valor || ''}
-                    onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                    required
-                  />
-                </div>
-              </>
-            )}
-            
-            <div className="flex gap-4">
-              <button type="button" onClick={closeModal} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2 px-4 rounded-lg">
-                Cancelar
-              </button>
-              <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg">
-                Salvar
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    )
-  }
-  
-  // ========== COMPONENTE PRINCIPAL ==========
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Header */}
-      <div className="bg-slate-900/50 border-b border-slate-700/50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-4xl font-bold text-white flex items-center">
-            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 p-3 rounded-full mr-4">
-              <Egg size={32} className="text-white" />
-            </div>
-            AvesGest PRO
-          </h1>
-          <p className="text-slate-400 mt-2">Gestão Profissional de Aves Poedeiras</p>
-        </div>
-      </div>
-      
-      {/* Navigation */}
-      <div className="bg-slate-800/30 border-b border-slate-700/50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex gap-4 overflow-x-auto">
-            <button
-              onClick={() => setCurrentView('dashboard')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
-                currentView === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <Home size={20} /> Dashboard
-            </button>
-            <button
-              onClick={() => setCurrentView('galpoes')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
-                currentView === 'galpoes' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <Warehouse size={20} /> Galpões
-            </button>
-            <button
-              onClick={() => setCurrentView('lotes')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
-                currentView === 'lotes' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <Users size={20} /> Lotes
-            </button>
-            <button
-              onClick={() => setCurrentView('producao')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
-                currentView === 'producao' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <Egg size={20} /> Produção
-            </button>
-            <button
-              onClick={() => setCurrentView('financeiro')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
-                currentView === 'financeiro' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <DollarSign size={20} /> Financeiro
-            </button>
-            <button
-              onClick={() => setCurrentView('relatorios')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap ${
-                currentView === 'relatorios' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <TrendingUp size={20} /> Relatórios
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Content */}
-      <div className="max-w-7xl mx-auto p-6">
-        {currentView === 'dashboard' && renderDashboard()}
-        {currentView === 'galpoes' && renderGalpoes()}
-        {currentView === 'lotes' && renderLotes()}
-        {currentView === 'producao' && renderProducao()}
-        {currentView === 'financeiro' && renderFinanceiro()}
-        {currentView === 'relatorios' && renderRelatorios()}
-      </div>
-      
-      {/* Modal */}
-      {renderModal()}
-    </div>
-  )
-}
+      <button
+        onClick={() => { setActiveTab(id); setIsMobileMenuOpen(false); }}
+        className={`flex items-center gap-3 px-4 py-3 w-full text-left rounded-lg transition-colors ${isActive ? 'bg-emerald-600 text-white shadow' : 'text-emerald-100 hover:bg-emerald-700 hover:text-white'}`}
+      >
+        {React.cloneElement(icon, { className: 'w-5 h-5' })}
+        <span className="font-medium">{label}</span>
+      </button>
+    );
+  };
 
-export default App
+  // --- VIEWS ---
+  const DashboardView = () => {
+    const totalAvesIniciais = galpoes.reduce((acc, g) => acc + g.avesAlojadas, 0);
+    const mortalidadeGeral = coletas.reduce((acc, c) => acc + c.mortalidadeTotal, 0);
+    const totalAvesVivas = totalAvesIniciais - mortalidadeGeral;
+
+    const chartData = useMemo(() => {
+        const dataMap = {};
+        coletas.forEach(c => {
+            if(!dataMap[c.data]) dataMap[c.data] = { data: c.data, ovos: 0, mortalidade: 0 };
+            dataMap[c.data].ovos += c.ovosTotal;
+            dataMap[c.data].mortalidade += c.mortalidadeTotal;
+        });
+        return Object.values(dataMap)
+            .sort((a, b) => new Date(a.data) - new Date(b.data))
+            .slice(-7)
+            .map(d => ({ ...d, data: d.data.split('-').slice(1).join('/') }));
+    }, [coletas]);
+
+    const alertas = useMemo(() => {
+        const avisos = [];
+        galpoes.forEach(g => {
+            const coletasDoGalpao = coletas.filter(c => c.galpaoId === g.id).sort((a,b) => new Date(a.data) - new Date(b.data));
+            if(coletasDoGalpao.length === 0) return;
+            const ultima = coletasDoGalpao[coletasDoGalpao.length - 1];
+            const avesVivas = calcularAvesVivasNaData(g.id, ultima.data);
+            
+            const mortPercent = (ultima.mortalidadeTotal / avesVivas) * 100;
+            if(mortPercent > 0.15) {
+                avisos.push({ 
+                    tipo: 'critico', 
+                    texto: `Alta mortalidade no ${g.nome} (${ultima.mortalidadeTotal} aves - ${mortPercent.toFixed(2)}%) em ${ultima.data}.`,
+                    contextoIa: `Lote ${g.nome}, ${g.idadeSemanas} semanas, sistema ${g.sistema}. Aves vivas: ${avesVivas}. Ocorreu uma mortalidade repentina de ${ultima.mortalidadeTotal} aves num único dia (${mortPercent.toFixed(2)}%).`
+                });
+            }
+            
+            const prodPercent = (ultima.ovosTotal / avesVivas) * 100;
+            if(prodPercent < 85 && g.idadeSemanas > 20 && g.idadeSemanas < 60) {
+                avisos.push({ 
+                    tipo: 'alerta', 
+                    texto: `Produção baixa no ${g.nome} (${prodPercent.toFixed(1)}%). Verifique o consumo de ração e ambiência.`,
+                    contextoIa: `Lote ${g.nome}, ${g.idadeSemanas} semanas, sistema ${g.sistema}. Aves vivas: ${avesVivas}. A produção de ovos caiu para ${prodPercent.toFixed(1)}%, que é baixo para o pico de produção (idade 20-60 semanas).`
+                });
+            }
+        });
+        return avisos;
+    }, [coletas, galpoes]);
+
+    const handleConsultarAlertaIA = (alerta) => {
+        const systemInstruction = "Você é um Médico Veterinário e Zootecnista especialista em patologia e manejo de aves de postura comercial. O usuário apresentará um alerta do sistema sobre o plantel. Forneça diagnósticos diferenciais breves e 3 recomendações emergenciais de manejo focadas na resolução da crise. Evite textos muito longos.";
+        const prompt = `Analise este alerta gerado pela nossa granja de postura: "${alerta.texto}". Contexto do lote: ${alerta.contextoIa}. O que pode estar causando isso e quais ações emergenciais devo tomar hoje?`;
+        callGeminiIA(prompt, systemInstruction, "Diagnóstico Inteligente de Alerta");
+    };
+
+    return (
+      <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
+        <h1 className="text-3xl font-bold text-slate-800 mb-8">Painel de Controle</h1>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <StatCard title="Total de Aves (Ativas)" value={totalAvesVivas.toLocaleString('pt-BR')} icon={<Bird />} color="text-blue-600" bg="bg-white border border-slate-200" />
+          <StatCard title="Galpões Ativos" value={galpoes.length} icon={<Home />} color="text-emerald-600" bg="bg-white border border-slate-200" />
+          <StatCard title="Total de Coletas" value={coletas.length} icon={<ClipboardList />} color="text-purple-600" bg="bg-white border border-slate-200" />
+          <StatCard title="Mortalidade Acumulada" value={mortalidadeGeral} icon={<AlertTriangle />} color="text-red-600" bg="bg-white border border-slate-200" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
+                <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-emerald-600" /> Curva de Produção Global (Últimos 7 dias)
+                </h2>
+                <div className="h-72">
+                    {chartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <XAxis dataKey="data" stroke="#64748b" fontSize={12} />
+                                <YAxis yAxisId="left" stroke="#64748b" fontSize={12} />
+                                <YAxis yAxisId="right" orientation="right" stroke="#ef4444" fontSize={12} />
+                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                <Legend />
+                                <Line yAxisId="left" type="monotone" name="Ovos Produzidos" dataKey="ovos" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                                <Line yAxisId="right" type="step" name="Mortalidade" dataKey="mortalidade" stroke="#ef4444" strokeWidth={2} strokeDasharray="5 5" />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="h-full flex items-center justify-center text-slate-400">Sem dados suficientes para o gráfico.</div>
+                    )}
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+                <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-amber-500" /> Alertas do Sistema
+                </h2>
+                <div className="flex-1 overflow-y-auto space-y-3">
+                    {alertas.length === 0 ? (
+                        <div className="text-sm text-slate-500 text-center mt-10">Tudo operando dentro da normalidade.</div>
+                    ) : (
+                        alertas.map((alerta, idx) => (
+                            <div key={idx} className={`p-4 rounded-lg border text-sm flex flex-col gap-3 ${alerta.tipo === 'critico' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                                <div>
+                                    <strong>{alerta.tipo === 'critico' ? 'CRÍTICO: ' : 'ATENÇÃO: '}</strong>
+                                    {alerta.texto}
+                                </div>
+                                <button 
+                                    onClick={() => handleConsultarAlertaIA(alerta)}
+                                    className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-md font-semibold text-xs transition-colors shadow-sm ${alerta.tipo === 'critico' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-amber-600 hover:bg-amber-700 text-white'}`}
+                                >
+                                    <Sparkles className="w-3 h-3" /> Consultar Zootecnista IA
+                                </button>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+      </div>
+    );
+  };
+
+  const GalpoesView = () => {
+    const [isAdding, setIsAdding] = useState(false);
+    const [novoGalpao, setNovoGalpao] = useState({ nome: '', dataEntrada: '', aves: '', idade: '', sistema: 'GAIOLA', area: '' });
+
+    const handleAdd = (e) => {
+        e.preventDefault();
+        setGalpoes([...galpoes, {
+            id: `g${Date.now()}`,
+            nome: novoGalpao.nome,
+            dataEntrada: novoGalpao.dataEntrada,
+            avesAlojadas: Number(novoGalpao.aves),
+            idadeSemanas: Number(novoGalpao.idade),
+            sistema: novoGalpao.sistema,
+            areaUtil: novoGalpao.sistema === 'CAGE_FREE' ? Number(novoGalpao.area) : null
+        }]);
+        setIsAdding(false);
+        setNovoGalpao({ nome: '', dataEntrada: '', aves: '', idade: '', sistema: 'GAIOLA', area: '' });
+    };
+
+    return (
+        <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold text-slate-800">Lotes e Galpões</h1>
+                {!isAdding && (
+                    <button onClick={() => setIsAdding(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow transition-colors">
+                        <PlusCircle className="w-5 h-5" /> Novo Lote
+                    </button>
+                )}
+            </div>
+
+            {isAdding && (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-200 mb-8">
+                    <h2 className="text-lg font-bold mb-4 text-emerald-800">Cadastrar Novo Lote/Galpão</h2>
+                    <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div><label className="block text-sm font-medium text-slate-700">Identificação (Nome)</label><input required type="text" value={novoGalpao.nome} onChange={e => setNovoGalpao({...novoGalpao, nome: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700">Data de Entrada</label><input required type="date" value={novoGalpao.dataEntrada} onChange={e => setNovoGalpao({...novoGalpao, dataEntrada: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700">Aves Iniciais</label><input required type="number" value={novoGalpao.aves} onChange={e => setNovoGalpao({...novoGalpao, aves: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700">Idade (Semanas)</label><input required type="number" value={novoGalpao.idade} onChange={e => setNovoGalpao({...novoGalpao, idade: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700">Sistema</label>
+                            <select value={novoGalpao.sistema} onChange={e => setNovoGalpao({...novoGalpao, sistema: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500">
+                                <option value="GAIOLA">Gaiolas</option><option value="CAGE_FREE">Cage Free (Piso)</option>
+                            </select>
+                        </div>
+                        {novoGalpao.sistema === 'CAGE_FREE' && (
+                            <div><label className="block text-sm font-medium text-slate-700">Área Útil (m²)</label><input required type="number" value={novoGalpao.area} onChange={e => setNovoGalpao({...novoGalpao, area: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-emerald-500" /></div>
+                        )}
+                        <div className="lg:col-span-3 flex justify-end gap-3 mt-2">
+                            <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Cancelar</button>
+                            <button type="submit" className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Salvar Cadastro</button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {galpoes.map(g => (
+                    <div key={g.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow relative overflow-hidden">
+                        <div className={`absolute top-0 left-0 w-1 h-full ${g.sistema === 'CAGE_FREE' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="font-bold text-lg text-slate-800">{g.nome}</h3>
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${g.sistema === 'CAGE_FREE' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                {g.sistema === 'CAGE_FREE' ? 'Cage Free' : 'Gaiolas'}
+                            </span>
+                        </div>
+                        <div className="space-y-2 text-sm text-slate-600">
+                            <p><strong>Aves Alojadas:</strong> {g.avesAlojadas.toLocaleString('pt-BR')} un</p>
+                            <p><strong>Idade Entrada:</strong> {g.idadeSemanas} semanas</p>
+                            <p><strong>Data Entrada:</strong> {new Date(g.dataEntrada).toLocaleDateString('pt-BR')}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+  };
+
+  const ColetaDiariaView = () => {
+    const [galpaoId, setGalpaoId] = useState(galpoes.length > 0 ? galpoes[0].id : '');
+    const [data, setData] = useState(new Date().toISOString().split('T')[0]);
+    
+    // Estados do Formulário
+    const [mortProlapso, setMortProlapso] = useState('');
+    const [mortCanibalismo, setMortCanibalismo] = useState('');
+    const [mortNatural, setMortNatural] = useState('');
+    const [mortSubita, setMortSubita] = useState('');
+    const [ovosTotal, setOvosTotal] = useState('');
+    const [pesoMedio, setPesoMedio] = useState('');
+    const [racaoFornecida, setRacaoFornecida] = useState('');
+    const [sobraRacao, setSobraRacao] = useState('');
+    const [precoRacao, setPrecoRacao] = useState(''); // Novo Campo Financeiro
+    
+    const [mensagem, setMensagem] = useState({ tipo: '', texto: '' });
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      const mortalidadeTotal = Number(mortProlapso) + Number(mortCanibalismo) + Number(mortNatural) + Number(mortSubita);
+      
+      const novaColeta = {
+        id: `c${Date.now()}`,
+        galpaoId,
+        data,
+        mortalidadeTotal,
+        ovosTotal: Number(ovosTotal),
+        pesoMedio: Number(pesoMedio),
+        racaoFornecida: Number(racaoFornecida),
+        sobra: Number(sobraRacao),
+        precoRacao: Number(precoRacao)
+      };
+
+      setColetas([...coletas, novaColeta]);
+      setMensagem({ tipo: 'sucesso', texto: 'Apontamento diário registrado com sucesso!' });
+      
+      setOvosTotal(''); setRacaoFornecida(''); setSobraRacao(''); setMortProlapso(''); setMortCanibalismo(''); setMortNatural(''); setMortSubita('');
+      setTimeout(() => setMensagem({ tipo: '', texto: '' }), 4000);
+    };
+
+    return (
+      <div className="p-6 max-w-4xl mx-auto space-y-6 animate-fade-in">
+        <h1 className="text-3xl font-bold text-slate-800">Apontamento Diário</h1>
+        {mensagem.texto && (
+          <div className="p-4 rounded-lg font-medium bg-green-100 text-green-800 border border-green-200 shadow-sm flex items-center gap-2">
+            <ClipboardList className="w-5 h-5" /> {mensagem.texto}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2"><ClipboardList className="w-5 h-5 text-emerald-600" /> 1. Identificação</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Galpão</label>
+                <select value={galpaoId} onChange={(e) => setGalpaoId(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg bg-slate-50">
+                  {galpoes.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Data da Coleta</label>
+                <input required type="date" value={data} onChange={(e) => setData(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2"><Egg className="w-5 h-5 text-yellow-500" /> 2. Produção e Nutrição</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Ovos (Qtd)</label><input required type="number" value={ovosTotal} onChange={(e) => setOvosTotal(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" placeholder="Ex: 4100" /></div>
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Peso Médio (g)</label><input required type="number" step="0.1" value={pesoMedio} onChange={(e) => setPesoMedio(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" placeholder="Ex: 62.5" /></div>
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Ração Fornecida (kg)</label><input required type="number" step="0.1" value={racaoFornecida} onChange={(e) => setRacaoFornecida(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" placeholder="Ex: 520" /></div>
+              <div><label className="block text-sm font-medium text-slate-700 mb-1">Sobra de Ração (kg)</label><input type="number" step="0.1" value={sobraRacao} onChange={(e) => setSobraRacao(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" placeholder="Ex: 5" /></div>
+            </div>
+            
+            <div className="mt-4 p-4 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center gap-4">
+                <DollarSign className="w-8 h-8 text-emerald-600" />
+                <div className="flex-1">
+                    <label className="block text-sm font-bold text-emerald-800 mb-1">Preço da Ração (R$/kg) <span className="text-xs font-normal text-emerald-600">- Opcional para cálculo de custos</span></label>
+                    <input type="number" step="0.01" value={precoRacao} onChange={(e) => setPrecoRacao(e.target.value)} className="w-full md:w-1/3 p-2 border border-emerald-200 rounded-lg focus:ring-emerald-500" placeholder="Ex: 2.15" />
+                </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+             <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2"><Bird className="w-5 h-5 text-red-500" /> 3. Mortalidade Diária</h2>
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div><label className="block text-sm font-medium text-slate-700">Prolapso</label><input type="number" min="0" value={mortProlapso} onChange={(e) => setMortProlapso(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-sm font-medium text-slate-700">Canibalismo</label><input type="number" min="0" value={mortCanibalismo} onChange={(e) => setMortCanibalismo(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-sm font-medium text-slate-700">Morte Natural</label><input type="number" min="0" value={mortNatural} onChange={(e) => setMortNatural(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" /></div>
+                <div><label className="block text-sm font-medium text-slate-700">Súbita</label><input type="number" min="0" value={mortSubita} onChange={(e) => setMortSubita(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg" /></div>
+             </div>
+          </div>
+
+          <div className="flex justify-end">
+             <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center gap-2">
+                 <ClipboardList className="w-5 h-5" /> Salvar Apontamento
+             </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
+  const RelatoriosView = () => {
+    const [selectedGalpao, setSelectedGalpao] = useState(galpoes.length > 0 ? galpoes[0].id : '');
+    const galpao = galpoes.find(g => g.id === selectedGalpao);
+    
+    const dadosGalpao = coletas
+        .filter(c => c.galpaoId === selectedGalpao)
+        .sort((a,b) => new Date(a.data) - new Date(b.data));
+
+    if (!galpao || dadosGalpao.length === 0) {
+        return (
+            <div className="p-6 max-w-7xl mx-auto space-y-6">
+                <h1 className="text-3xl font-bold text-slate-800 mb-6">Índices Zootécnicos</h1>
+                <select value={selectedGalpao} onChange={(e) => setSelectedGalpao(e.target.value)} className="w-full max-w-md p-2 border border-slate-300 rounded-lg mb-4">
+                    {galpoes.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
+                </select>
+                <div className="p-8 bg-white border border-slate-200 rounded-xl text-center text-slate-500">Nenhum dado zootécnico registrado para este galpão ainda.</div>
+            </div>
+        );
+    }
+
+    const ultimaColeta = dadosGalpao[dadosGalpao.length - 1];
+    const avesVivasHoje = calcularAvesVivasNaData(selectedGalpao, ultimaColeta.data);
+    const avesSeguras = avesVivasHoje > 0 ? avesVivasHoje : 1;
+
+    // Fórmulas Zootécnicas
+    const producaoOvosPorcentagem = (ultimaColeta.ovosTotal / avesSeguras) * 100;
+    const consumoTotalDiarioKg = ultimaColeta.racaoFornecida - (ultimaColeta.sobra || 0);
+    const consumoMedioGramas = (consumoTotalDiarioKg * 1000) / avesSeguras;
+    
+    const pesoTotalOvosKg = (ultimaColeta.ovosTotal * ultimaColeta.pesoMedio) / 1000;
+    const conversaoAlimentarKgKg = pesoTotalOvosKg > 0 ? (consumoTotalDiarioKg / pesoTotalOvosKg) : 0;
+    const conversaoAlimentarDz = ultimaColeta.ovosTotal > 0 ? (consumoTotalDiarioKg / (ultimaColeta.ovosTotal / 12)) : 0;
+
+    // Fórmulas Financeiras
+    const custoRacaoDia = consumoTotalDiarioKg * (ultimaColeta.precoRacao || 0);
+    const duziasProduzidas = ultimaColeta.ovosTotal / 12;
+    const custoAlimentarPorDuzia = duziasProduzidas > 0 ? (custoRacaoDia / duziasProduzidas) : 0;
+
+    const mortalidadeTotalLote = dadosGalpao.reduce((acc, c) => acc + c.mortalidadeTotal, 0);
+    const viabilidade = ((galpao.avesAlojadas - mortalidadeTotalLote) / galpao.avesAlojadas) * 100;
+
+    const handleGerarParecerIA = () => {
+        const systemInstruction = "Você é um Zootecnista sênior, especialista em gestão técnica de granjas de postura. Sua função é avaliar os índices zootécnicos e financeiros do lote atual. Forneça um parecer claro: se está bom, ruim, e dê recomendações construtivas e realistas (manejo, ração, luz, etc). Estruture em tópicos breves para fácil leitura no celular.";
+        const prompt = `Gere um Parecer Zootécnico para o seguinte lote de postura (Data base: ${ultimaColeta.data}):\nLote: ${galpao.nome}\nIdade inicial: ${galpao.idadeSemanas} semanas\nViabilidade: ${viabilidade.toFixed(2)}%\nProdução Atual: ${producaoOvosPorcentagem.toFixed(1)}%\nConsumo Médio: ${consumoMedioGramas.toFixed(1)} g/ave\nConversão Alimentar: ${conversaoAlimentarKgKg.toFixed(3)} kg/kg massa\nCusto Alimentar (se informado): R$ ${custoAlimentarPorDuzia.toFixed(2)} por dúzia. Analise o que significa essa CA e produção. Há indicativo de desperdício? Como otimizar?`;
+        callGeminiIA(prompt, systemInstruction, `Parecer Técnico Zootécnico - ${galpao.nome}`);
+    };
+
+    return (
+      <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+            <h1 className="text-3xl font-bold text-slate-800">Índices e Desempenho</h1>
+            <select value={selectedGalpao} onChange={(e) => setSelectedGalpao(e.target.value)} className="w-full md:w-auto min-w-[250px] p-2 border border-emerald-300 rounded-lg bg-emerald-50 text-emerald-900 font-semibold focus:ring-emerald-500 shadow-sm">
+                {galpoes.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
+            </select>
+        </div>
+        
+        <div className="flex justify-between items-center mb-2">
+            <h2 className="text-lg font-bold text-slate-600">Desempenho Atual ({ultimaColeta.data.split('-').reverse().join('/')})</h2>
+            <button 
+                onClick={handleGerarParecerIA}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 text-sm"
+            >
+                <Sparkles className="w-4 h-4" /> Gerar Parecer Zootécnico (IA)
+            </button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <StatCard title="Viabilidade do Lote" value={`${viabilidade.toFixed(2)}%`} icon={<Activity />} color={viabilidade >= 98 ? "text-emerald-600" : "text-amber-500"} bg="bg-white border border-slate-200" />
+            <StatCard title="Produção" value={`${producaoOvosPorcentagem.toFixed(1)}%`} icon={<Egg />} color="text-yellow-600" bg="bg-white border border-slate-200" />
+            <StatCard title="Consumo Médio" value={`${consumoMedioGramas.toFixed(1)} g/ave`} icon={<Scale />} color="text-blue-600" bg="bg-white border border-slate-200" />
+            
+            <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm hover:shadow-md transition-shadow">
+                <p className="text-sm font-medium text-slate-600 mb-1">Conversão Alimentar</p>
+                <div className="flex flex-col">
+                    <span className="text-xl font-bold text-slate-800">{conversaoAlimentarKgKg.toFixed(3)} <span className="text-sm font-normal text-slate-500">kg/kg massa</span></span>
+                    <span className="text-md font-semibold text-slate-600">{conversaoAlimentarDz.toFixed(3)} <span className="text-xs font-normal text-slate-500">kg/dúzia</span></span>
+                </div>
+            </div>
+        </div>
+
+        {ultimaColeta.precoRacao > 0 && (
+            <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-xl shadow-sm mb-8">
+                <h2 className="text-lg font-bold text-emerald-800 mb-4 flex items-center gap-2"><DollarSign className="w-5 h-5" /> Indicadores Financeiros (Custo Alimentar)</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div><p className="text-sm font-medium text-emerald-600">Preço da Ração Informado</p><p className="text-2xl font-bold text-emerald-900">R$ {ultimaColeta.precoRacao.toFixed(2)} <span className="text-sm font-normal">/kg</span></p></div>
+                    <div><p className="text-sm font-medium text-emerald-600">Custo Total em Ração (Dia)</p><p className="text-2xl font-bold text-emerald-900">R$ {custoRacaoDia.toFixed(2)}</p></div>
+                    <div className="bg-white p-4 rounded-lg shadow-inner border border-emerald-100">
+                        <p className="text-sm font-bold text-slate-600">Custo Alimentar p/ Dúzia</p>
+                        <p className="text-3xl font-black text-emerald-600">R$ {custoAlimentarPorDuzia.toFixed(2)}</p>
+                    </div>
+                </div>
+            </div>
+        )}
+      </div>
+    );
+  };
+
+  const AssistenteView = () => {
+    const [pergunta, setPergunta] = useState("");
+    const [resposta, setResposta] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const handleAsk = async (e) => {
+      e.preventDefault();
+      if (!pergunta.trim()) return;
+      setLoading(true);
+      setResposta("");
+      
+      try {
+          const payload = {
+              contents: [{ parts: [{ text: pergunta }] }],
+              systemInstruction: { parts: [{ text: "Você é um especialista em avicultura de postura (Zootecnista/Veterinário). Responda dúvidas de produtores com clareza, dicas práticas de manejo, ambiência e nutrição. Formate em tópicos curtos e diretos focados na solução." }] }
+          };
+          
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+          const data = await fetchWithBackoff(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+          });
+
+          const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (generatedText) {
+              setResposta(generatedText);
+          } else {
+              throw new Error("Resposta inválida");
+          }
+      } catch (error) {
+          setResposta("⚠️ Erro ao contatar a IA. Verifique sua conexão e tente novamente.");
+      } finally {
+          setLoading(false);
+      }
+    };
+
+    return (
+      <div className="p-6 max-w-4xl mx-auto space-y-6 animate-fade-in">
+        <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
+           <Bot className="w-8 h-8 text-indigo-600" />
+           Consultoria Zootécnica IA
+        </h1>
+        <p className="text-slate-600 text-lg">Descreva sintomas das aves, dúvidas sobre formulação de ração, manejo de ambiência ou sanidade. Nosso Assistente Virtual analisará seu caso e fornecerá recomendações precisas ✨.</p>
+        
+        <form onSubmit={handleAsk} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+           <label className="block text-sm font-medium text-slate-700 mb-2">Sua Dúvida ou Problema no Lote</label>
+           <textarea 
+             value={pergunta}
+             onChange={(e) => setPergunta(e.target.value)}
+             placeholder="Ex: Minhas aves estão com 45 semanas, a produção caiu 10% nos últimos 3 dias e notei fezes esverdeadas. O que pode ser e como devo proceder com o manejo?"
+             className="w-full p-4 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 min-h-[120px] resize-none"
+           />
+           <div className="flex justify-end mt-4">
+               <button disabled={loading || !pergunta.trim()} type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 transition-colors shadow font-semibold">
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  {loading ? 'Analisando caso...' : '✨ Perguntar ao Especialista'}
+               </button>
+           </div>
+        </form>
+
+        {resposta && (
+           <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl shadow-sm animate-fade-in whitespace-pre-wrap text-slate-800 leading-relaxed text-sm md:text-base">
+              <div className="flex items-center gap-2 mb-4 text-indigo-800 font-bold border-b border-indigo-200 pb-2">
+                  <Sparkles className="w-5 h-5" /> Parecer do Assistente IA
+              </div>
+              {resposta}
+           </div>
+        )}
+      </div>
+    );
+  };
+
+  const StatCard = ({ title, value, icon, color, bg }) => (
+    <div className={`${bg} p-6 rounded-xl shadow-sm flex items-start gap-4 hover:shadow-md transition-shadow`}>
+      <div className={`p-3 rounded-lg bg-slate-50 ${color}`}>{React.cloneElement(icon, { className: 'w-6 h-6' })}</div>
+      <div><p className="text-sm font-medium text-slate-600 mb-1">{title}</p><h3 className="text-2xl font-bold text-slate-800">{value}</h3></div>
+    </div>
+  );
+
+  return (
+    <div className="flex bg-slate-50 min-h-screen font-sans relative">
+      <Sidebar />
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-emerald-800 text-white flex items-center px-4 z-10 shadow-md">
+          <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -ml-2"><Menu className="w-6 h-6" /></button>
+          <span className="ml-2 font-bold text-lg tracking-wide">AveGest</span>
+      </div>
+      <main className="flex-1 overflow-x-hidden overflow-y-auto pt-16 md:pt-0 relative">
+        {activeTab === 'dashboard' && <DashboardView />}
+        {activeTab === 'galpoes' && <GalpoesView />}
+        {activeTab === 'coleta' && <ColetaDiariaView />}
+        {activeTab === 'relatorios' && <RelatoriosView />}
+        {activeTab === 'assistente' && <AssistenteView />}
+      </main>
+
+      {/* --- MODAL DA INTELIGÊNCIA ARTIFICIAL --- */}
+      {aiModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-fade-in">
+                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+                    <div className="flex items-center gap-3 text-indigo-700">
+                        <Bot className="w-6 h-6" />
+                        <h3 className="font-bold text-lg">{aiContextTitle}</h3>
+                    </div>
+                    <button onClick={() => setAiModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1"><X className="w-6 h-6" /></button>
+                </div>
+                <div className="p-6 overflow-y-auto flex-1 bg-white text-slate-700 leading-relaxed text-sm md:text-base">
+                    {aiLoading ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-indigo-600">
+                            <Loader2 className="w-10 h-10 animate-spin mb-4" />
+                            <p className="font-medium animate-pulse">O Zootecnista Virtual está analisando os dados...</p>
+                            <p className="text-xs text-slate-400 mt-2">Consultando modelos zootécnicos avançados</p>
+                        </div>
+                    ) : (
+                        <div className="whitespace-pre-wrap">
+                            <div className="flex items-start gap-3 p-4 mb-4 bg-blue-50 text-blue-800 rounded-lg border border-blue-100">
+                                <Info className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                                <p className="text-xs leading-tight">Este parecer foi gerado por Inteligência Artificial (Gemini) e não substitui uma visita técnica presencial. Recomenda-se acompanhamento veterinário local para diagnósticos clínicos.</p>
+                            </div>
+                            {aiResponse}
+                        </div>
+                    )}
+                </div>
+                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+                    <button onClick={() => setAiModalOpen(false)} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow transition-colors">
+                        Fechar Laudo
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+    </div>
+  );
+}
