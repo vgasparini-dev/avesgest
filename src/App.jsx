@@ -7,7 +7,7 @@ import {
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
-import './design-moderno.css';
+import './modern-design.css';
 // --- CONFIGURAÇÃO DA API GEMINI ---
 const apiKey = ""; // A chave da API é injetada automaticamente no ambiente
 const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
